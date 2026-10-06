@@ -1,0 +1,1581 @@
+{
+  "app": "sachin-tracker",
+  "version": "1.3.0",
+  "exportedAt": "2026-10-06T23:28:59.000Z",
+  "data": {
+    "version": 2,
+    "checklists": [],
+    "avoid": {
+      "items": [],
+      "log": {}
+    },
+    "goals": [],
+    "grocery": {
+      "master": [
+        {
+          "id": "14efa09dec",
+          "name": "Tissues Origami",
+          "size": 100,
+          "sizeUnit": "pcs",
+          "count": 1,
+          "price": 0,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "9655b83f79",
+          "name": "Sofy",
+          "size": 1,
+          "sizeUnit": "pack",
+          "count": 1,
+          "price": 0,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "1b1e1783e6",
+          "name": "Harpic",
+          "size": 500,
+          "sizeUnit": "ml",
+          "count": 1,
+          "price": 0,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "e694d99a76",
+          "name": "Lizol",
+          "size": 500,
+          "sizeUnit": "ml",
+          "count": 1,
+          "price": 0,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "b351d65782",
+          "name": "Vim Dishwash",
+          "size": 500,
+          "sizeUnit": "ml",
+          "count": 1,
+          "price": 0,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "649c65b613",
+          "name": "Surf Excel Bar ₹38",
+          "size": 250,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 38,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "0060371e14",
+          "name": "Surf Excel Bar ₹40",
+          "size": 250,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 40,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "19802a7856",
+          "name": "Pitambari",
+          "size": 200,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "745e13fa78",
+          "name": "Sabena Powder",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "cd8c40c19a",
+          "name": "Scotch Brite Scrub",
+          "size": 1,
+          "sizeUnit": "pcs",
+          "count": 2,
+          "price": 0,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "a93084a704",
+          "name": "Odonil",
+          "size": 50,
+          "sizeUnit": "g",
+          "count": 2,
+          "price": 0,
+          "cat": "Home & Cleaning"
+        },
+        {
+          "id": "76fa816149",
+          "name": "Shampoo L'Oréal",
+          "size": 175,
+          "sizeUnit": "ml",
+          "count": 1,
+          "price": 0,
+          "cat": "Personal Care"
+        },
+        {
+          "id": "6dc2d9b7e5",
+          "name": "Lux Soap",
+          "size": 125,
+          "sizeUnit": "g",
+          "count": 2,
+          "price": 0,
+          "cat": "Personal Care"
+        },
+        {
+          "id": "f0eef2becb",
+          "name": "Comfort blue",
+          "size": 860,
+          "sizeUnit": "ml",
+          "count": 2,
+          "price": 60,
+          "cat": "Personal Care"
+        },
+        {
+          "id": "140daf6ea9",
+          "name": "Comfort pink",
+          "size": 860,
+          "sizeUnit": "ml",
+          "count": 2,
+          "price": 60,
+          "cat": "Personal Care"
+        },
+        {
+          "id": "1b8e643d92",
+          "name": "Comfort purple",
+          "size": 860,
+          "sizeUnit": "ml",
+          "count": 1,
+          "price": 65,
+          "cat": "Personal Care"
+        },
+        {
+          "id": "ecb664ad90",
+          "name": "Cotton Pads Tulips",
+          "size": 80,
+          "sizeUnit": "pcs",
+          "count": 1,
+          "price": 0,
+          "cat": "Personal Care"
+        },
+        {
+          "id": "d1a162ce04",
+          "name": "Hair Colour",
+          "size": 1,
+          "sizeUnit": "pack",
+          "count": 1,
+          "price": 0,
+          "cat": "Personal Care"
+        },
+        {
+          "id": "97bc170a5c",
+          "name": "Agarbathi Cycle ₹55",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 55,
+          "cat": "Puja"
+        },
+        {
+          "id": "bd8275b319",
+          "name": "Agarbathi Cycle ₹110",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 110,
+          "cat": "Puja"
+        },
+        {
+          "id": "72bf976cb2",
+          "name": "Red Label Tea",
+          "size": 250,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Breakfast"
+        },
+        {
+          "id": "237c9232bc",
+          "name": "Britannia Good Day",
+          "size": 1,
+          "sizeUnit": "pack",
+          "count": 1,
+          "price": 0,
+          "cat": "Breakfast"
+        },
+        {
+          "id": "a6317e7dc8",
+          "name": "Sugar Free",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Breakfast"
+        },
+        {
+          "id": "2edc9347f2",
+          "name": "Vermicelli",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Breakfast"
+        },
+        {
+          "id": "7b64ef4f7a",
+          "name": "Thandai",
+          "size": 200,
+          "sizeUnit": "ml",
+          "count": 1,
+          "price": 0,
+          "cat": "Breakfast"
+        },
+        {
+          "id": "b5d15a4f7a",
+          "name": "Barley Rice",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Breakfast"
+        },
+        {
+          "id": "c73401930f",
+          "name": "Tata Salt",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Oils, Salt & Kitchen"
+        },
+        {
+          "id": "cf6d163e52",
+          "name": "Gingelly Oil Amrut",
+          "size": 1,
+          "sizeUnit": "L",
+          "count": 4,
+          "price": 0,
+          "cat": "Oils, Salt & Kitchen"
+        },
+        {
+          "id": "43086390c7",
+          "name": "Sunflower Oil Free",
+          "size": 1,
+          "sizeUnit": "L",
+          "count": 1,
+          "price": 0,
+          "cat": "Oils, Salt & Kitchen"
+        },
+        {
+          "id": "7b169c8638",
+          "name": "Nandini Ghee",
+          "size": 500,
+          "sizeUnit": "ml",
+          "count": 4,
+          "price": 0,
+          "cat": "Oils, Salt & Kitchen"
+        },
+        {
+          "id": "1beda7287a",
+          "name": "Coconut Oil KLF",
+          "size": 500,
+          "sizeUnit": "ml",
+          "count": 1,
+          "price": 0,
+          "cat": "Oils, Salt & Kitchen"
+        },
+        {
+          "id": "2b304f4859",
+          "name": "Copra",
+          "size": 150,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Oils, Salt & Kitchen"
+        },
+        {
+          "id": "56c5fd890a",
+          "name": "Coconut",
+          "size": 1,
+          "sizeUnit": "pcs",
+          "count": 9,
+          "price": 0,
+          "cat": "Oils, Salt & Kitchen"
+        },
+        {
+          "id": "918d588b52",
+          "name": "Rice ₹50",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 3,
+          "price": 50,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "1f35d3fdbe",
+          "name": "Rice ₹65",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 3,
+          "price": 65,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "cd4ed5271b",
+          "name": "Rice ₹73",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 2,
+          "price": 73,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "46320362ec",
+          "name": "Atta Aashirvaad",
+          "size": 5,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "85cd59b886",
+          "name": "Corn Flour",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "621fc94f92",
+          "name": "Rice Flour",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 2,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "8ef5f18f91",
+          "name": "Maida",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "0fbcb00098",
+          "name": "Ragi Powder",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "99a3c4ffe6",
+          "name": "Chiroti Suji",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "43e8c03db6",
+          "name": "Bengal-Gram Dal",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "d221c373d7",
+          "name": "Gram Flour",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "f1821bd3dc",
+          "name": "Green-Gram Premium",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "c4fd1d63c9",
+          "name": "Toor-Dal Premium",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "155745a8c1",
+          "name": "Bengal-Gram",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "b2bac7157b",
+          "name": "Bansi-Suji",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Rice & Flours"
+        },
+        {
+          "id": "261afb4011",
+          "name": "B-Chilli",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "dadec2a397",
+          "name": "S-Chilli",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "33ed670475",
+          "name": "Pepper Powder",
+          "size": 50,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "f1f175e65f",
+          "name": "Tamarind",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "bf330ca353",
+          "name": "Channa Masala",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "df25e8705b",
+          "name": "Kashmiri Chilli Powder",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "e9f2c1a86a",
+          "name": "Turmeric Powder",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 2,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "bd9eb6c1be",
+          "name": "Chilli Powder",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "809d77f2fb",
+          "name": "Puliyogare Powder",
+          "size": 100,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "3db9eaa3cb",
+          "name": "Hing Powder MDH",
+          "size": 50,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "1eb90c42ee",
+          "name": "Elaichi ₹60",
+          "size": 25,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 60,
+          "cat": "Spices"
+        },
+        {
+          "id": "1ddf3a8a64",
+          "name": "Cinnamon",
+          "size": 50,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "dde1b18226",
+          "name": "Clove",
+          "size": 25,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Spices"
+        },
+        {
+          "id": "b45c35611c",
+          "name": "Elaichi ₹115",
+          "size": 10,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 115,
+          "cat": "Spices"
+        },
+        {
+          "id": "3da5824b13",
+          "name": "Jaggery blocks",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Sugar"
+        },
+        {
+          "id": "1a8cb501a3",
+          "name": "Sugar",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Sugar"
+        },
+        {
+          "id": "7f47cd2103",
+          "name": "White Rice Flakes",
+          "size": 500,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Sugar"
+        },
+        {
+          "id": "8b78ef10f0",
+          "name": "R-Jaggery spherical",
+          "size": 850,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Dals, Pulses & Nuts"
+        },
+        {
+          "id": "368bc0e766",
+          "name": "R-Jaggery cubes",
+          "size": 260,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Dals, Pulses & Nuts"
+        },
+        {
+          "id": "31c8961117",
+          "name": "Horse-Gram",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Dals, Pulses & Nuts"
+        },
+        {
+          "id": "aa052baa28",
+          "name": "Masoor-Gola",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Dals, Pulses & Nuts"
+        },
+        {
+          "id": "8c5d776ccc",
+          "name": "Ground-Nut",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Dals, Pulses & Nuts"
+        },
+        {
+          "id": "e40b984d63",
+          "name": "Kabool-Chana",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Dals, Pulses & Nuts"
+        },
+        {
+          "id": "6fdd3840f8",
+          "name": "Badam Mix",
+          "size": 1,
+          "sizeUnit": "kg",
+          "count": 1,
+          "price": 0,
+          "cat": "Dals, Pulses & Nuts"
+        },
+        {
+          "id": "f779df7382",
+          "name": "Yogurt Milky Mist",
+          "size": 400,
+          "sizeUnit": "g",
+          "count": 5,
+          "price": 40,
+          "cat": "Other"
+        },
+        {
+          "id": "ab94ac8399",
+          "name": "Sauce Maggi",
+          "size": 200,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Sauces & Other"
+        },
+        {
+          "id": "f7052d4cca",
+          "name": "Ginger Garlic Paste",
+          "size": 300,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Sauces & Other"
+        },
+        {
+          "id": "d98b1e84a8",
+          "name": "Appalam Aachi",
+          "size": 200,
+          "sizeUnit": "g",
+          "count": 1,
+          "price": 0,
+          "cat": "Sauces & Other"
+        }
+      ],
+      "months": {
+        "2026-10": {
+          "created": "2026-10-06T23:28:59.000Z",
+          "items": [
+            {
+              "mid": "14efa09dec",
+              "name": "Tissues Origami",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "pcs",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "9655b83f79",
+              "name": "Sofy",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "pack",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "1b1e1783e6",
+              "name": "Harpic",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "ml",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "e694d99a76",
+              "name": "Lizol",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "ml",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "b351d65782",
+              "name": "Vim Dishwash",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "ml",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "649c65b613",
+              "name": "Surf Excel Bar ₹38",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 250,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 38
+            },
+            {
+              "mid": "0060371e14",
+              "name": "Surf Excel Bar ₹40",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 250,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 40
+            },
+            {
+              "mid": "19802a7856",
+              "name": "Pitambari",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 200,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "745e13fa78",
+              "name": "Sabena Powder",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "cd8c40c19a",
+              "name": "Scotch Brite Scrub",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "pcs",
+              "count": 2,
+              "price": 0
+            },
+            {
+              "mid": "a93084a704",
+              "name": "Odonil",
+              "cat": "Home & Cleaning",
+              "want": true,
+              "bought": false,
+              "size": 50,
+              "sizeUnit": "g",
+              "count": 2,
+              "price": 0
+            },
+            {
+              "mid": "76fa816149",
+              "name": "Shampoo L'Oréal",
+              "cat": "Personal Care",
+              "want": true,
+              "bought": false,
+              "size": 175,
+              "sizeUnit": "ml",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "6dc2d9b7e5",
+              "name": "Lux Soap",
+              "cat": "Personal Care",
+              "want": true,
+              "bought": false,
+              "size": 125,
+              "sizeUnit": "g",
+              "count": 2,
+              "price": 0
+            },
+            {
+              "mid": "f0eef2becb",
+              "name": "Comfort blue",
+              "cat": "Personal Care",
+              "want": true,
+              "bought": false,
+              "size": 860,
+              "sizeUnit": "ml",
+              "count": 2,
+              "price": 60
+            },
+            {
+              "mid": "140daf6ea9",
+              "name": "Comfort pink",
+              "cat": "Personal Care",
+              "want": true,
+              "bought": false,
+              "size": 860,
+              "sizeUnit": "ml",
+              "count": 2,
+              "price": 60
+            },
+            {
+              "mid": "1b8e643d92",
+              "name": "Comfort purple",
+              "cat": "Personal Care",
+              "want": true,
+              "bought": false,
+              "size": 860,
+              "sizeUnit": "ml",
+              "count": 1,
+              "price": 65
+            },
+            {
+              "mid": "ecb664ad90",
+              "name": "Cotton Pads Tulips",
+              "cat": "Personal Care",
+              "want": true,
+              "bought": false,
+              "size": 80,
+              "sizeUnit": "pcs",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "d1a162ce04",
+              "name": "Hair Colour",
+              "cat": "Personal Care",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "pack",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "97bc170a5c",
+              "name": "Agarbathi Cycle ₹55",
+              "cat": "Puja",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 55
+            },
+            {
+              "mid": "bd8275b319",
+              "name": "Agarbathi Cycle ₹110",
+              "cat": "Puja",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 110
+            },
+            {
+              "mid": "72bf976cb2",
+              "name": "Red Label Tea",
+              "cat": "Breakfast",
+              "want": true,
+              "bought": false,
+              "size": 250,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "237c9232bc",
+              "name": "Britannia Good Day",
+              "cat": "Breakfast",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "pack",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "a6317e7dc8",
+              "name": "Sugar Free",
+              "cat": "Breakfast",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "2edc9347f2",
+              "name": "Vermicelli",
+              "cat": "Breakfast",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "7b64ef4f7a",
+              "name": "Thandai",
+              "cat": "Breakfast",
+              "want": true,
+              "bought": false,
+              "size": 200,
+              "sizeUnit": "ml",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "b5d15a4f7a",
+              "name": "Barley Rice",
+              "cat": "Breakfast",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "c73401930f",
+              "name": "Tata Salt",
+              "cat": "Oils, Salt & Kitchen",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "cf6d163e52",
+              "name": "Gingelly Oil Amrut",
+              "cat": "Oils, Salt & Kitchen",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "L",
+              "count": 4,
+              "price": 0
+            },
+            {
+              "mid": "43086390c7",
+              "name": "Sunflower Oil Free",
+              "cat": "Oils, Salt & Kitchen",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "L",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "7b169c8638",
+              "name": "Nandini Ghee",
+              "cat": "Oils, Salt & Kitchen",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "ml",
+              "count": 4,
+              "price": 0
+            },
+            {
+              "mid": "1beda7287a",
+              "name": "Coconut Oil KLF",
+              "cat": "Oils, Salt & Kitchen",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "ml",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "2b304f4859",
+              "name": "Copra",
+              "cat": "Oils, Salt & Kitchen",
+              "want": true,
+              "bought": false,
+              "size": 150,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "56c5fd890a",
+              "name": "Coconut",
+              "cat": "Oils, Salt & Kitchen",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "pcs",
+              "count": 9,
+              "price": 0
+            },
+            {
+              "mid": "918d588b52",
+              "name": "Rice ₹50",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 3,
+              "price": 50
+            },
+            {
+              "mid": "1f35d3fdbe",
+              "name": "Rice ₹65",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 3,
+              "price": 65
+            },
+            {
+              "mid": "cd4ed5271b",
+              "name": "Rice ₹73",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 2,
+              "price": 73
+            },
+            {
+              "mid": "46320362ec",
+              "name": "Atta Aashirvaad",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 5,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "85cd59b886",
+              "name": "Corn Flour",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "621fc94f92",
+              "name": "Rice Flour",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 2,
+              "price": 0
+            },
+            {
+              "mid": "8ef5f18f91",
+              "name": "Maida",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "0fbcb00098",
+              "name": "Ragi Powder",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "99a3c4ffe6",
+              "name": "Chiroti Suji",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "43e8c03db6",
+              "name": "Bengal-Gram Dal",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "d221c373d7",
+              "name": "Gram Flour",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "f1821bd3dc",
+              "name": "Green-Gram Premium",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "c4fd1d63c9",
+              "name": "Toor-Dal Premium",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "155745a8c1",
+              "name": "Bengal-Gram",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "b2bac7157b",
+              "name": "Bansi-Suji",
+              "cat": "Rice & Flours",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "261afb4011",
+              "name": "B-Chilli",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "dadec2a397",
+              "name": "S-Chilli",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "33ed670475",
+              "name": "Pepper Powder",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 50,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "f1f175e65f",
+              "name": "Tamarind",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "bf330ca353",
+              "name": "Channa Masala",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "df25e8705b",
+              "name": "Kashmiri Chilli Powder",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "e9f2c1a86a",
+              "name": "Turmeric Powder",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 2,
+              "price": 0
+            },
+            {
+              "mid": "bd9eb6c1be",
+              "name": "Chilli Powder",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "809d77f2fb",
+              "name": "Puliyogare Powder",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 100,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "3db9eaa3cb",
+              "name": "Hing Powder MDH",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 50,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "1eb90c42ee",
+              "name": "Elaichi ₹60",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 25,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 60
+            },
+            {
+              "mid": "1ddf3a8a64",
+              "name": "Cinnamon",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 50,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "dde1b18226",
+              "name": "Clove",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 25,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "b45c35611c",
+              "name": "Elaichi ₹115",
+              "cat": "Spices",
+              "want": true,
+              "bought": false,
+              "size": 10,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 115
+            },
+            {
+              "mid": "3da5824b13",
+              "name": "Jaggery blocks",
+              "cat": "Sugar",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "1a8cb501a3",
+              "name": "Sugar",
+              "cat": "Sugar",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "7f47cd2103",
+              "name": "White Rice Flakes",
+              "cat": "Sugar",
+              "want": true,
+              "bought": false,
+              "size": 500,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "8b78ef10f0",
+              "name": "R-Jaggery spherical",
+              "cat": "Dals, Pulses & Nuts",
+              "want": true,
+              "bought": false,
+              "size": 850,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "368bc0e766",
+              "name": "R-Jaggery cubes",
+              "cat": "Dals, Pulses & Nuts",
+              "want": true,
+              "bought": false,
+              "size": 260,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "31c8961117",
+              "name": "Horse-Gram",
+              "cat": "Dals, Pulses & Nuts",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "aa052baa28",
+              "name": "Masoor-Gola",
+              "cat": "Dals, Pulses & Nuts",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "8c5d776ccc",
+              "name": "Ground-Nut",
+              "cat": "Dals, Pulses & Nuts",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "e40b984d63",
+              "name": "Kabool-Chana",
+              "cat": "Dals, Pulses & Nuts",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "6fdd3840f8",
+              "name": "Badam Mix",
+              "cat": "Dals, Pulses & Nuts",
+              "want": true,
+              "bought": false,
+              "size": 1,
+              "sizeUnit": "kg",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "f779df7382",
+              "name": "Yogurt Milky Mist",
+              "cat": "Other",
+              "want": true,
+              "bought": false,
+              "size": 400,
+              "sizeUnit": "g",
+              "count": 5,
+              "price": 40
+            },
+            {
+              "mid": "ab94ac8399",
+              "name": "Sauce Maggi",
+              "cat": "Sauces & Other",
+              "want": true,
+              "bought": false,
+              "size": 200,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "f7052d4cca",
+              "name": "Ginger Garlic Paste",
+              "cat": "Sauces & Other",
+              "want": true,
+              "bought": false,
+              "size": 300,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            },
+            {
+              "mid": "d98b1e84a8",
+              "name": "Appalam Aachi",
+              "cat": "Sauces & Other",
+              "want": true,
+              "bought": false,
+              "size": 200,
+              "sizeUnit": "g",
+              "count": 1,
+              "price": 0
+            }
+          ]
+        }
+      },
+      "prices": [],
+      "lastStore": ""
+    },
+    "stores": [
+      {
+        "id": "s1",
+        "name": "DMart"
+      },
+      {
+        "id": "s2",
+        "name": "BigBasket"
+      },
+      {
+        "id": "s3",
+        "name": "Blinkit"
+      },
+      {
+        "id": "s4",
+        "name": "Zepto"
+      },
+      {
+        "id": "s5",
+        "name": "Reliance Fresh"
+      },
+      {
+        "id": "s6",
+        "name": "Local kirana"
+      },
+      {
+        "id": "s7",
+        "name": "Other"
+      }
+    ],
+    "meta": {
+      "created": "2026-10-06T23:28:59.000Z",
+      "note": "Imported from MONTHLY HOME GROCERY CHECKLIST poster"
+    }
+  }
+}

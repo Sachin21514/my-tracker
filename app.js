@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 const STORE_KEY = 'sachin-tracker-v1';
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const $ = s => document.querySelector(s);
 
 /* ---------- date helpers (device local time) ---------- */
@@ -320,7 +320,8 @@ const G = () => S.grocery;
 const PACK_UNITS = ['g', 'kg', 'ml', 'L', 'pcs', 'dozen', 'pack'];
 const UNIT_BASE = { g: ['kg', 0.001], kg: ['kg', 1], ml: ['L', 0.001], L: ['L', 1], pcs: ['pc', 1], dozen: ['pc', 12], pack: ['pack', 1] };
 const UNIT_ALIAS = { g: 'g', gm: 'g', gms: 'g', gr: 'g', gram: 'g', grams: 'g', kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg', ml: 'ml', l: 'L', lt: 'L', ltr: 'L', ltrs: 'L', litre: 'L', litres: 'L', liter: 'L', liters: 'L',
-  pc: 'pcs', pcs: 'pcs', piece: 'pcs', pieces: 'pcs', nos: 'pcs', no: 'pcs', dozen: 'dozen', doz: 'dozen', dz: 'dozen', pack: 'pack', packs: 'pack', packet: 'pack', packets: 'pack', pkt: 'pack', pkts: 'pack' };
+  pc: 'pcs', pcs: 'pcs', piece: 'pcs', pieces: 'pcs', nos: 'pcs', no: 'pcs', dozen: 'dozen', doz: 'dozen', dz: 'dozen', pack: 'pack', packs: 'pack', packet: 'pack', packets: 'pack', pkt: 'pack', pkts: 'pack',
+  pull: 'pcs', pulls: 'pcs', pad: 'pcs', pads: 'pcs', cup: 'pcs', cups: 'pcs', bar: 'pcs', bars: 'pcs' };
 const toPackUnit = u => UNIT_ALIAS[String(u || '').toLowerCase()] || (UNIT_BASE[u] ? u : null);
 /* Old free-text units ("kg", "5 kg", "400 g", "litre", "dozen", "bunch", "") → { size, unit }. */
 function parsePack(str) {
@@ -1056,11 +1057,15 @@ function viewStoreSummary(y) {
    ===================================================================== */
 const OCR_BASE = 'vendor/tesseract/';
 const UNIT_WORDS = { kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg', g: 'g', gm: 'g', gms: 'g', gr: 'g', gram: 'g', grams: 'g', l: 'litre', lt: 'litre', ltr: 'litre', ltrs: 'litre', litre: 'litre', litres: 'litre', liter: 'litre', liters: 'litre', ml: 'ml',
-  pc: 'pc', pcs: 'pc', piece: 'pc', pieces: 'pc', pkt: 'packet', pkts: 'packet', packet: 'packet', packets: 'packet', pack: 'packet', packs: 'packet', dozen: 'dozen', doz: 'dozen', dz: 'dozen', nos: 'pc', no: 'pc', bunch: 'bunch', bunches: 'bunch', box: 'box', bottle: 'bottle', bottles: 'bottle', can: 'can', tin: 'tin', bag: 'bag', jar: 'jar' };
+  pc: 'pc', pcs: 'pc', piece: 'pc', pieces: 'pc', pkt: 'packet', pkts: 'packet', packet: 'packet', packets: 'packet', pack: 'packet', packs: 'packet', dozen: 'dozen', doz: 'dozen', dz: 'dozen', nos: 'pc', no: 'pc', bunch: 'bunch', bunches: 'bunch', box: 'box', bottle: 'bottle', bottles: 'bottle', can: 'can', tin: 'tin', bag: 'bag', jar: 'jar', jars: 'jar',
+  pull: 'pc', pulls: 'pc', pad: 'pc', pads: 'pc', cup: 'pc', cups: 'pc', bar: 'pc', bars: 'pc', qty: 'packet' };
 const UNIT_RE_SRC = Object.keys(UNIT_WORDS).sort((a, b) => b.length - a.length).join('|');
 const SIZE_RE = new RegExp('(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')\\b\\.?', 'i');
 const SKIP_RE = /\b(sub\s*-?\s*total|total|grand|net\s*(amt|amount|payable|value)|amount\s*(due|paid|payable|in\s*words)|gst|cgst|sgst|igst|utgst|vat|tax|taxable|cess|round(ed)?\s*-?\s*off|discount|disc|saving|savings|saved|change|cash|card|upi|paytm|gpay|phonepe|tender(ed)?|paid|balance|bill|invoice|inv|receipt|token|table|cashier|counter|date|time|phone|ph|mob(ile)?|tel|contact|gstin|fssai|cin|thank|thanks|visit|again|welcome|www|http|email|address|road|street|nagar|layout|cross|main\s*rd|pin\s*code|hsn|sac|description|particulars|sl|s\.?\s*no|qty|rate|mrp\s*total|items?\s*count|no\s*of\s*items|customer|terms|conditions|exchange|refund|e\s*&\s*o\.?\s*e)\b/i;
 const LIST_HEADER_RE = /^(my\s+)?(shopping|grocery|groceries|kirana|to\s*buy|buy|list|items?|things\s+to\s+buy)(\s+list)?\s*[:\-]?\s*$/i;
+const POSTER_HEADER_RE = /^(your\s+monthly\s+shopping|monthly\s+home\s+grocery|what\s+to\s+buy|how\s+to\s+use(\s+this\s+checklist)?|tip\s*:|copy\s+this\s+list|check\s+items|skip\s+if\s+you\s+have|add\s+if\s+needed|item(\s*$|\s+qty)|qty\s*\(?\s*count|qty\s*\(?\s*grams)/i;
+const SECTION_ONLY_RE = /^(home\s*&\s*cleaning|personal\s+care|puja(\s*\/?\s*fragrance)?|breakfast(\s*\/?\s*beverages)?|oils(?:,\s*salt\s*&\s*basic\s*kitchen)?|rice\s*&\s*flours?|dals?(,\s*pulses\s*&\s*nuts)?|spices?(\s*&\s*masalas?)?|sugar(\s*&\s*sweeteners)?|sauces?(\s*&\s*other)?|other)\s*$/i;
+const DENSE_TIP = 'This looks like a dense checklist. Try a closer photo of one section, or ask Kyoto to import the full list for you.';
 const SYNONYMS = { tur: 'toor', arhar: 'toor', toovar: 'toor', dahi: 'curd', yogurt: 'curd', yoghurt: 'curd', chili: 'chilli', chilly: 'chilli', dhania: 'coriander', jeera: 'cumin', bhindi: 'okra', baingan: 'brinjal', eggplant: 'brinjal', aloo: 'potato', alu: 'potato', pyaz: 'onion', pyaaz: 'onion', tamatar: 'tomato', chawal: 'rice', doodh: 'milk', cheeni: 'sugar', namak: 'salt', haldi: 'turmeric', maida: 'flour', capsicum: 'capsicum', curd: 'curd' };
 const STOP = new Set(['fresh', 'organic', 'premium', 'loose', 'the', 'of', 'and', 'pack', 'packet', 'pkt', 'new', 'special', 'pure', 'best', 'quality', 'super', 'regular', 'local']);
 
@@ -1141,10 +1146,76 @@ function isJunkLine(l) {
   return false;
 }
 /* Parse OCR text into candidate grocery lines. Exported for tests. */
+function isPosterJunk(l) {
+  if (POSTER_HEADER_RE.test(l) || SECTION_ONLY_RE.test(l)) return true;
+  if (/how\s+to\s+use|copy\s+this\s+list|check\s+items|skip\s+if|add\s+if\s+needed|review\s+this\s+list\s+every\s+month/i.test(l)) return true;
+  if (/^item\b/i.test(l) && /qty/i.test(l)) return true;
+  return false;
+}
+const CONTAINER_WORDS = new Set(['bottle','bottles','pack','packs','packet','packets','pkt','pkts','jar','jars','cup','cups','bar','bars','box','boxes','pcs','pes','pc','qty','each','item','items','liquid','line','approx','size','medium','regular','count','grams','pulls','pads','otte','les','ttl','pesel']);
+function isGarbledName(name) {
+  const letters = (name.match(/[A-Za-z]/g) || []).length;
+  const weird = (name.match(/[^A-Za-z0-9\s'\-&./₹]/g) || []).length;
+  if (letters < 3) return true;
+  if (weird > Math.max(2, letters * 0.45)) return true;
+  const toks = name.split(/\s+/).filter(t => /[A-Za-z]{3,}/.test(t));
+  return toks.length === 0;
+}
+function isWeakName(name) {
+  if (isGarbledName(name) || isPosterJunk(name)) return true;
+  const toks = name.toLowerCase().split(/\s+/).filter(Boolean);
+  if (toks.length === 1 && /^(bottl|bottle|pack|packet|jar|cups?|bars?|boxes?|qty|each|item|approx|liquid|size|count|grams?|pulls?|pads?|pes|pcs)$/i.test(toks[0])) return true;
+  // OCR crumbs like "Nt 1 Lom" (short tokens around a bare number, no real size unit)
+  if (/\b[A-Za-z]{1,3}\s+\d+\s+[A-Za-z]{1,3}\b/.test(name) && !SIZE_RE.test(name)) return true;
+  const real = toks.filter(t => /[a-z]{3,}/i.test(t) && !CONTAINER_WORDS.has(t) && !/^\d/.test(t));
+  if (!real.length) return true;
+  // A single real word of 3+ letters is enough ("Oil", "Vim", "Ghee", "Lux Soap")
+  if (real.some(t => t.length >= 3)) return false;
+  if (/[₹\d]/.test(name) && real.length >= 1) return false;
+  return true;
+}
+/* Pull ITEM / QTY / SIZE rows out of dense checklist-poster OCR (multi-column mashups). */
+function extractChecklistItems(text) {
+  const items = [];
+  const push = (name, count, size, unit) => {
+    name = cleanName(String(name || '').replace(/\s+/g, ' '));
+    name = name.replace(/^[^A-Za-z]+/, '');
+    name = name.replace(/^(pack|packet|pkt|ml|g|kg|each|other|jo|fu|es|bh|ey|ice|ne|xo|xa|a|y|i|e|b)\s+/ig, '');
+    name = name.replace(/\s*\(?₹?\d{1,4}\)?\s*(line)\)?\s*$/i, '').replace(/\s*\(\d{2,3}\s*line\)\s*$/i, '').trim();
+    name = cleanName(name);
+    if (!name || name.length > 36 || isWeakName(name)) return;
+    const sz = size > 0 && size < 100000 ? size : null;
+    let u = '';
+    if (sz) {
+      u = toPackUnit(unit) || toPackUnit(UNIT_WORDS[String(unit || '').toLowerCase()]) || (UNIT_BASE[unit] ? unit : null) || 'pack';
+    }
+    items.push({ name, size: sz, unit: sz ? u : '', count: count > 0 && count < 1000 ? count : 1, price: 0, amount: 0 });
+  };
+  const blob = String(text || '').replace(/\r/g, '\n');
+  let m;
+  // "Lizol Cleaner 1 bottle 500 ml" / "Sabena Powder 1 pack 1 kg" / "Tissues Origami 1 pack 100 pulls"
+  const re1 = /\b([A-Za-z][A-Za-z0-9'\/\-]{1,}(?:\s+[A-Za-z][A-Za-z0-9'\/\-]{1,}){0,3})\s+(\d+(?:\.\d+)?)\s*(?:packs?|packets?|pkts?|bottles?|bars?|jars?|cups?|boxes?)\b[^A-Za-z0-9]{0,20}(\d+(?:\.\d+)?)\s*(g|kg|ml|l|pcs|pulls?|pads?)\b/gi;
+  while ((m = re1.exec(blob))) push(m[1], parseFloat(m[2]), parseFloat(m[3]), m[4]);
+  // "Turmeric Powder 2 packs 100 g each" / "Comfort 2 bottles 860 ml each"
+  const re1b = /\b([A-Za-z][A-Za-z0-9'\/\-]{1,}(?:\s+[A-Za-z][A-Za-z0-9'\/\-]{1,}){0,3})\s+(\d+(?:\.\d+)?)\s*(?:packs?|packets?|bottles?|bars?|jars?|cups?|pcs|pes)\b[^A-Za-z0-9]{0,12}(\d+(?:\.\d+)?)\s*(g|kg|ml|l)\s*each\b/gi;
+  while ((m = re1b.exec(blob))) push(m[1], parseFloat(m[2]), parseFloat(m[3]), m[4]);
+  // "Thandai 200 ml" / "Ragi Powder 500g" / "Cotton Pads 80 pad"
+  const re2 = /\b([A-Za-z][A-Za-z0-9'\/\-]{2,}(?:\s+[A-Za-z][A-Za-z0-9'\/\-]{1,}){0,3})\s+(\d+(?:\.\d+)?)\s*(g|kg|ml|l|pulls?|pads?)\b(?:\s*each)?/gi;
+  while ((m = re2.exec(blob))) push(m[1], 1, parseFloat(m[2]), m[3]);
+  // "R-Jaggery 0.85qty (Approx. 850 g)" / "Horse-Gram 1qty (Approx. 1 kg)"
+  const re3 = /\b([A-Za-z][A-Za-z0-9'\/\-]*(?:-[A-Za-z][A-Za-z0-9'\/\-]*)?(?:\s+[A-Za-z][A-Za-z0-9'\/\-]*){0,2})\s+(\d+(?:\.\d+)?)\s*qty\b[^\n]{0,30}?Approx\.?\s*(\d+(?:\.\d+)?)\s*(g|kg|ml|l)\b/gi;
+  while ((m = re3.exec(blob))) push(m[1], 1, parseFloat(m[3]), m[4]);
+  // "Scotch Brite Scrub 2 pcs" / "Coconut 9 pcs"
+  const re4 = /\b([A-Za-z][A-Za-z0-9'\/\-]{2,}(?:\s+[A-Za-z][A-Za-z0-9'\/\-]{1,}){0,3})\s+(\d+(?:\.\d+)?)\s*(pcs|pes|pieces?)\b(?!\s*\d)/gi;
+  while ((m = re4.exec(blob))) push(m[1], parseFloat(m[2]), 1, 'pcs');
+  return items;
+}
 function parseOcrText(text) {
-  const lines = String(text || '').replace(/\r/g, '').split('\n').map(l => l.replace(/[“”"]/g, '').replace(/\t/g, '  ').trim()).filter(l => l.length > 1);
+  const rawText = String(text || '');
+  const lines = rawText.replace(/\r/g, '').split('\n').map(l => l.replace(/[“”"]/g, '').replace(/\t/g, '  ').trim()).filter(l => l.length > 1);
   const priced = lines.filter(l => !SKIP_RE.test(l) && /\d+[.,]\d{2}\s*$/.test(l)).length;
   const mode = (priced >= 2 || (priced >= 1 && priced >= lines.length * 0.3)) ? 'receipt' : 'list';
+  const looksChecklist = /QTY\s*\(?\s*COUNT|HOW\s+TO\s+USE\s+THIS\s+CHECKLIST|MONTHLY\s+HOME\s+GROCERY|ITEM\s+QTY/i.test(rawText);
   const items = [];
   let started = false, pendingName = null;
   for (const raw of lines) {
@@ -1170,14 +1241,13 @@ function parseOcrText(text) {
       sp.name = sp.name.replace(/^\d{1,3}[.)]?\s+(?=[A-Za-z])/, '');
       items.push(mkItem(sp.name, interpretNums(sp.nums), mode)); started = true; pendingName = null;
     } else {
-      if (LIST_HEADER_RE.test(l) || isJunkLine(l)) continue;
+      if (LIST_HEADER_RE.test(l) || isPosterJunk(l) || isJunkLine(l)) continue;
       if (SKIP_RE.test(l) && !/^[-*•·\d.)\s]*[A-Za-z]/.test(l.replace(SKIP_RE, ''))) continue;
       l = l.replace(/^\s*[-–—*•·>○◦□☐✓✔]+\s*/, '').replace(/^\(?\d{1,2}[.)]\s+/, '');
       l = l.replace(new RegExp('(^|\\s)([SsOoIl|])\\s*(?=(' + UNIT_RE_SRC + ')\\b)', 'g'), (m0, a, c) => a + ({ S: '5', s: '5', O: '0', o: '0', I: '1', l: '1', '|': '1' })[c] + ' ');
-      // a number with a weight/volume/piece unit is the PACK SIZE ("Toor dal 1 kg", "Butter 100g");
-      // a bare number or "x 3" / "3 packets" is the COUNT ("Milk x 4", "3 Onions").
+      // Prefer pack-size tokens (g/ml/kg/L/pcs/pulls/pads) over bare counts when both appear.
       let count = 1, size = null, unit = '';
-      const take = (n, u) => { const pu = u ? (toPackUnit(u) || 'pack') : null; if (pu && pu !== 'pack') { size = n; unit = pu; } else count = n; };
+      const take = (n, u) => { const pu = u ? (toPackUnit(u) || (UNIT_WORDS[String(u).toLowerCase()] ? toPackUnit(UNIT_WORDS[String(u).toLowerCase()]) : null) || 'pack') : null; if (pu && pu !== 'pack') { size = n; unit = pu; } else count = n; };
       let m = l.match(new RegExp('^(\\d+(?:\\.\\d+)?)\\s*(?:[xX×]\\s*)?(' + UNIT_RE_SRC + ')?\\b\\.?\\s*(?:[xX×]\\s+)?(?=[A-Za-z])', 'i'));  // "2 kg onions", "3 eggs", "2 x butter"
       if (m && !(m[2] === undefined && /^\d+[A-Za-z]/.test(l))) { take(parseFloat(m[1]), m[2]); l = l.slice(m[0].length); }
       m = l.match(new RegExp('[\\s\\-–:,(]+[xX×]\\s*(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')?\\.?\\)?\\s*$', 'i'));        // "... x 2"
@@ -1186,21 +1256,33 @@ function parseOcrText(text) {
       if (m) { take(parseFloat(m[1]), m[2]); l = l.slice(0, m.index); }
       if (size == null) { const sz = extractSize(l); if (sz.size) { size = sz.size.n; unit = sz.size.u; if (unit === 'pack') { count = size; size = null; unit = ''; } l = sz.name; } }  // size inside the name
       const name = cleanName(l);
-      if ((name.match(/[A-Za-z]/g) || []).length < 2 || name.length > 40) continue;
+      if ((name.match(/[A-Za-z]/g) || []).length < 2 || name.length > 40 || isWeakName(name)) continue;
       items.push({ name, size: size > 0 && size < 100000 ? size : null, unit: size > 0 ? unit : '', count: count > 0 && count < 1000 ? count : 1, price: 0, amount: 0 });
     }
   }
-  // tidy + de-duplicate by normalized name
+  let pool = items;
+  if (mode === 'list' && looksChecklist) {
+    // Multi-column posters mash names together on one OCR line — prefer structured ITEM/QTY/SIZE extraction.
+    pool = extractChecklistItems(rawText);
+  }
+  // tidy + de-duplicate by normalized name (prefer entries that have a size)
   const out = [];
-  items.forEach(it => {
-    if (!it || !it.name || (it.name.match(/[A-Za-z]/g) || []).length < 2) return;
+  pool.forEach(it => {
+    if (!it || !it.name || (it.name.match(/[A-Za-z]/g) || []).length < 2 || isWeakName(it.name)) return;
+    if (isPosterJunk(it.name)) return;
     const k = normName(it.name);
-    if (!k) return;
-    const prev = out.find(o => normName(o.name) === k && (o.unit || '') === (it.unit || '') && (o.size || 0) === (it.size || 0));
-    if (prev) { const tot = prev.count * prev.price + it.count * it.price; prev.count = r2(prev.count + it.count); prev.price = prev.count ? r2(tot / prev.count) : prev.price; prev.amount = r2(prev.amount + it.amount); }
-    else out.push(it);
+    if (!k || k.length < 3) return;
+    const prev = out.find(o => normName(o.name) === k && (o.unit || '') === (it.unit || '') && Math.abs((o.size || 0) - (it.size || 0)) < 1e-9);
+    if (prev) {
+      // keep the larger count if one side lacked a size and got merged incorrectly — prefer explicit size
+      if (!prev.size && it.size) { prev.size = it.size; prev.unit = it.unit; }
+      prev.count = Math.max(prev.count, it.count);
+      const tot = prev.count * prev.price + it.count * it.price;
+      if (it.price) prev.price = prev.count ? r2(tot / Math.max(prev.count, 1)) : prev.price;
+      prev.amount = r2((prev.amount || 0) + (it.amount || 0));
+    } else out.push(it);
   });
-  return { mode, items: out, lines: lines.length };
+  return { mode, items: out, lines: lines.length, checklist: looksChecklist };
 }
 function mkItem(rawName, nums, mode) {
   let name = cleanName(rawName.replace(/\s+\d+(\.\d+)?\s*$/, ''));
@@ -1264,30 +1346,58 @@ async function getTesseract() {
   if (!window.Tesseract) throw new Error('OCR engine unavailable');
   return window.Tesseract;
 }
+function enhanceCanvas(c) {
+  const ctx = c.getContext('2d');
+  const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data;
+  const g = new Uint8ClampedArray(p.length / 4);
+  for (let i = 0, j = 0; i < p.length; i += 4, j++) g[j] = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+  const hist = new Uint32Array(256); g.forEach(v => hist[v]++);
+  let lo = 0, hi = 255, acc = 0; const n = g.length;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > n * 0.02) { lo = v; break; } }
+  acc = 0; for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > n * 0.02) { hi = v; break; } }
+  const span = Math.max(30, hi - lo);
+  for (let i = 0, j = 0; i < p.length; i += 4, j++) {
+    let v = Math.max(0, Math.min(255, (g[j] - lo) * 255 / span));
+    // mild contrast boost: push midtones apart
+    v = v < 128 ? Math.max(0, v - 18) : Math.min(255, v + 22);
+    p[i] = p[i + 1] = p[i + 2] = v;
+  }
+  ctx.putImageData(d, 0, 0);
+  return c;
+}
+function cropCanvas(src, sx, sy, sw, sh) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(sw)); c.height = Math.max(1, Math.round(sh));
+  c.getContext('2d').drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  return c;
+}
+/* Upscale + contrast; for tall/dense posters also return overlapping vertical slices (and left/right halves). */
 function prepImage(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file), img = new Image();
     img.onload = () => {
-      const w0 = img.naturalWidth, h0 = img.naturalHeight, long = Math.max(w0, h0);
-      const scale = long > 2400 ? 2400 / long : (long < 1200 ? Math.min(2.5, 1200 / long) : 1);
-      const c = document.createElement('canvas');
-      c.width = Math.round(w0 * scale); c.height = Math.round(h0 * scale);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      const w0 = img.naturalWidth, h0 = img.naturalHeight, long = Math.max(w0, h0), short = Math.min(w0, h0);
+      // Prefer a long edge around 3000–3200 px so small checklist text is readable
+      const scale = Math.max(1, Math.min(3.5, Math.max(3000 / long, short < 900 ? 1800 / short : 0)));
+      const W = Math.round(w0 * scale), H = Math.round(h0 * scale);
+      const full = document.createElement('canvas');
+      full.width = W; full.height = H;
+      const ctx = full.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, c.width, c.height);
-      // grayscale + gentle contrast stretch helps with phone photos
-      const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data;
-      let lo = 255, hi = 0; const g = new Uint8ClampedArray(p.length / 4);
-      for (let i = 0, j = 0; i < p.length; i += 4, j++) { const v = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; g[j] = v; }
-      const hist = new Uint32Array(256); g.forEach(v => hist[v]++);
-      let acc = 0; const n = g.length;
-      for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > n * 0.01) { lo = v; break; } }
-      acc = 0; for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > n * 0.01) { hi = v; break; } }
-      const span = Math.max(40, hi - lo);
-      for (let i = 0, j = 0; i < p.length; i += 4, j++) { const v = Math.max(0, Math.min(255, (g[j] - lo) * 255 / span)); p[i] = p[i + 1] = p[i + 2] = v; }
-      ctx.putImageData(d, 0, 0);
-      URL.revokeObjectURL(url); resolve(c);
+      ctx.drawImage(img, 0, 0, W, H);
+      enhanceCanvas(full);
+      const canvases = [full];
+      // Tall posters: OCR overlapping vertical bands so small multi-column text is not lost.
+      // (No left/right halves — those split single-column lists and invent junk names.)
+      const tall = H > W * 1.2 || H > 1600;
+      if (tall) {
+        const overlap = Math.round(H * 0.08), band = Math.ceil(H / 3) + overlap;
+        const ys = [0, Math.max(0, Math.floor(H / 3) - overlap), Math.max(0, H - band)];
+        ys.forEach(y => canvases.push(cropCanvas(full, 0, y, W, Math.min(band, H - y))));
+      }
+      URL.revokeObjectURL(url);
+      resolve({ canvases, large: (w0 * h0) >= 400000 || tall, width: W, height: H });
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file could not be opened as an image')); };
     img.src = url;
@@ -1302,30 +1412,55 @@ function ocrProgressSheet() {
     '<div class="actions"><button class="btn block" type="button" id="ocrCancel">Cancel</button></div></div></div>';
   $('#ocrCancel').onclick = () => { ocrCancelled = true; if (ocrWorker) { ocrWorker.terminate().catch(() => {}); ocrWorker = null; } closeSheet(); toast('Cancelled'); };
 }
-function ocrProgress(m) {
+function ocrProgress(m, sliceInfo) {
   const st = document.getElementById('ocrStatus'); if (!st) return;
-  const label = OCR_STATUS[m.status] || (m.status ? m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…' : '');
+  let label = OCR_STATUS[m.status] || (m.status ? m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…' : '');
+  if (sliceInfo && m.status === 'recognizing text') label = 'Reading section ' + sliceInfo.i + ' of ' + sliceInfo.n + '…';
   st.textContent = label;
-  // weight: setup steps 0–30%, recognition 30–100%
-  const p = m.status === 'recognizing text' ? 30 + (m.progress || 0) * 70 : Math.min(30, 5 + (m.progress || 0) * 25);
+  const base = sliceInfo ? ((sliceInfo.i - 1) / sliceInfo.n) * 70 : 0;
+  const span = sliceInfo ? (70 / sliceInfo.n) : 70;
+  const p = m.status === 'recognizing text' ? 30 + base + (m.progress || 0) * span : Math.min(30, 5 + (m.progress || 0) * 25);
   document.getElementById('ocrBar').style.width = p.toFixed(0) + '%';
   document.getElementById('ocrPct').textContent = p.toFixed(0) + '%';
 }
-async function ocrRecognize(canvas) {
+function mergeOcrTexts(parts) {
+  const seen = new Set(), out = [];
+  parts.forEach(t => String(t || '').split(/\n/).forEach(raw => {
+    const l = raw.replace(/\s+/g, ' ').trim();
+    if (l.length < 2) return;
+    const k = l.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!k || seen.has(k)) return;
+    // near-duplicate: skip if a longer line already contains this key
+    let covered = false;
+    for (const s of seen) { if (s.includes(k) || k.includes(s)) { if (s.length >= k.length) covered = true; break; } }
+    if (covered) return;
+    seen.add(k); out.push(l);
+  }));
+  return out.join('\n');
+}
+async function ocrRecognize(canvases) {
+  const list = Array.isArray(canvases) ? canvases : [canvases];
   const T = await getTesseract();
   const abs = p => new URL(p, location.href).href;
-  const opts = { logger: m => { if (!ocrCancelled) ocrProgress(m); }, errorHandler: () => {} };
+  let sliceInfo = null;
+  const opts = { logger: m => { if (!ocrCancelled) ocrProgress(m, sliceInfo); }, errorHandler: () => {} };
   if (!ocrFromCdn) Object.assign(opts, { workerBlobURL: false, workerPath: abs(OCR_BASE + 'worker.min.js'), corePath: abs(OCR_BASE + 'core/' + (simdSupported() ? 'tesseract-core-simd-lstm.wasm.js' : 'tesseract-core-lstm.wasm.js')), langPath: abs(OCR_BASE + 'lang'), gzip: true });
   ocrWorker = await T.createWorker('eng', 1, opts);
   try {
     await ocrWorker.setParameters({ tessedit_pageseg_mode: String(window.__OCR_PSM || '6'), preserve_interword_spaces: '1' });
-    const res = await ocrWorker.recognize(canvas);
-    if (!ocrFromCdn && window.caches) {   // keep the OCR engine available offline
+    const texts = [];
+    for (let i = 0; i < list.length; i++) {
+      if (ocrCancelled) break;
+      sliceInfo = list.length > 1 ? { i: i + 1, n: list.length } : null;
+      const res = await ocrWorker.recognize(list[i]);
+      texts.push(res.data.text || '');
+    }
+    if (!ocrFromCdn && window.caches) {
       const core = OCR_BASE + 'core/' + (simdSupported() ? 'tesseract-core-simd-lstm.wasm.js' : 'tesseract-core-lstm.wasm.js');
       caches.open('tracker-ocr-v1').then(c => Promise.all([OCR_BASE + 'tesseract.min.js', OCR_BASE + 'worker.min.js', core, OCR_BASE + 'lang/eng.traineddata.gz']
         .map(u => c.match(abs(u)).then(hit => hit || c.add(abs(u)))))).catch(() => {});
     }
-    return res.data.text || '';
+    return mergeOcrTexts(texts);
   } finally { if (ocrWorker) { ocrWorker.terminate().catch(() => {}); ocrWorker = null; } }
 }
 async function handlePhoto(file) {
@@ -1333,11 +1468,12 @@ async function handlePhoto(file) {
   if (!/^https?:$/.test(location.protocol) && !window.Tesseract) { /* file:// fallback: try anyway, CDN may work */ }
   ocrCancelled = false;
   ocrProgressSheet();
-  let text = '';
+  let text = '', large = false;
   try {
-    const canvas = await prepImage(file);
+    const prep = await prepImage(file);
+    large = !!prep.large;
     if (ocrCancelled) return;
-    text = await ocrRecognize(canvas);
+    text = await ocrRecognize(prep.canvases);
   } catch (e) {
     if (ocrCancelled) return;
     closeSheet();
@@ -1346,15 +1482,18 @@ async function handlePhoto(file) {
   }
   if (ocrCancelled) return;
   window.__lastOcrText = text;
+  window.__lastOcrLarge = large;
   const parsed = parseOcrText(text);
-  if (!parsed.items.length) return ocrNothingFound(text);
-  openOcrReview(parsed, text);
+  if (!parsed.items.length) return ocrNothingFound(text, large);
+  openOcrReview(parsed, text, large);
 }
-function ocrNothingFound(text) {
+function ocrNothingFound(text, large) {
   const has = text.replace(/\s/g, '').length > 0;
+  const dense = !!large || /QTY\s*\(?\s*COUNT|HOW\s+TO\s+USE\s+THIS\s+CHECKLIST|MONTHLY\s+HOME\s+GROCERY/i.test(text || '');
   $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="No items found" data-testid="ocr-empty"><div class="grab"></div><h3>🤔 No items found</h3>' +
     '<p class="small">' + (has ? 'I could read some text, but nothing that looks like grocery items.' : 'I couldn’t read any text in that photo.') + '</p>' +
-    '<div class="note">Tips: use good light, hold the phone straight above the paper, fill the frame with the list, and avoid shadows. Printed bills work best; neat block letters work for handwriting.</div>' +
+    (dense ? '<div class="note" data-testid="ocr-dense-tip">' + esc(DENSE_TIP) + '</div>' :
+      '<div class="note">Tips: use good light, hold the phone straight above the paper, fill the frame with the list, and avoid shadows. Printed bills work best; neat block letters work for handwriting.</div>') +
     (has ? '<details><summary class="small muted">Show what was read</summary><pre class="ocr-raw">' + esc(text.trim()) + '</pre></details>' : '') +
     '<div class="actions"><button class="btn" type="button" data-x="close">Close</button><button class="btn primary" type="button" data-x="again">Try another photo</button></div></div></div>';
   const bg = $('#sheetRoot .sheet-bg');
@@ -1366,9 +1505,10 @@ function ocrNothingFound(text) {
 
 /* ---- review screen ---- */
 let review = null;
-function openOcrReview(parsed, text) {
+function openOcrReview(parsed, text, large) {
   const mk = ui.gMonth && G().months[ui.gMonth] ? ui.gMonth : curMonthKey();
-  review = { mk, mode: parsed.mode, asBought: parsed.mode === 'receipt', addMaster: true, text, store: G().lastStore && storeById(G().lastStore) ? G().lastStore : '',
+  review = { mk, mode: parsed.mode, asBought: parsed.mode === 'receipt', addMaster: true, text, large: !!large,
+    store: G().lastStore && storeById(G().lastStore) ? G().lastStore : '',
     items: parsed.items.map(it => reviewItem(it, parsed.mode)) };
   renderReview();
 }
@@ -1404,8 +1544,10 @@ function renderReview() {
           '<label>₹ <input class="rv-num price" data-rv-in="price" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.price || '') + '" placeholder="/pack" aria-label="Price per pack"></label></div>' +
         '<div class="tiny" id="rvm' + i + '">' + reviewMatchLabel(it) + '</div></div>' +
       '<button type="button" class="icon-btn ghost sm" data-rv="del" data-i="' + i + '" aria-label="Delete line">✕</button></div>').join('');
+  const showDense = R.large && R.items.length < 3;
   $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet tall" role="dialog" aria-label="Review items" data-testid="ocr-review"><div class="grab"></div>' +
     '<h3>Review items <span class="muted small">(' + R.items.length + ' found)</span></h3>' +
+    (showDense ? '<div class="note" data-testid="ocr-dense-tip">' + esc(DENSE_TIP) + '</div>' : '') +
     '<div class="small muted">Looks like a ' + (R.mode === 'receipt' ? '<b>bill / receipt</b>' : '<b>shopping list</b>') + '. Fix anything that was misread, untick what you don’t want.</div>' +
     '<div class="rv-list">' + (rows || '<div class="empty small">No lines.</div>') + '</div>' +
     '<button type="button" class="btn sm" data-rv="addline" style="margin:6px 0">＋ Add a line</button>' +
@@ -1739,6 +1881,6 @@ function init() {
   }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 }
-window.Tracker = { get state() { return S; }, checkRollover, render, ensureMonth, goalStats, avoidStats, yearData, STORE_KEY, importText, parseOcrText, matchMaster, nameSimilarity, normName, handlePhoto };
+window.Tracker = { get state() { return S; }, checkRollover, render, ensureMonth, goalStats, avoidStats, yearData, STORE_KEY, importText, parseOcrText, extractChecklistItems, matchMaster, nameSimilarity, normName, handlePhoto };
 init();
 })();

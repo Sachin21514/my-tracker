@@ -1,5 +1,5 @@
 /* Service worker: offline app shell (cache-first, refreshed in background). */
-const CACHE = 'tracker-v1.2.0';
+const CACHE = 'tracker-v1.3.0';
 const OCR_CACHE = 'tracker-ocr-v1'; // large OCR files: cached on first use, kept across app updates
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './manifest.json',

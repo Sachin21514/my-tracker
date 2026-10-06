@@ -1,4 +1,4 @@
-# My Tracker
+# My Tracker (v1.3)
 
 A mobile-first personal tracker you can install on your phone (PWA). It works offline.
 
@@ -10,7 +10,7 @@ A mobile-first personal tracker you can install on your phone (PWA). It works of
   - Master item list, plus a fresh list every month with the last price prefilled.
   - Month totals in ₹, and a yearly view with price history.
   - Quantity is **pack size × count** (e.g. *Toor dal — 200 g × 3*). Price is per pack, and the app shows the total weight and ₹/kg (or ₹/L, ₹/pc) so different pack sizes compare fairly.
-  - **📷 Add from photo**: snap a handwritten/typed list or a shop bill. Text is read on the phone, then you review and add the items.
+  - **📷 Add from photo**: snap a handwritten/typed list or a shop bill. Text is read on the phone, then you review and add the items. Dense multi-column checklist posters are upscaled and read in vertical slices; if almost nothing is found, the app suggests a closer photo or importing a JSON list.
   - **Price by store** (Mall, BigBasket, Blinkit, Zepto, JioMart, Amazon Fresh, Local kirana, or add your own with “＋ New store…” right in the picker): shows the cheapest store per item, how much you'd save versus where you last bought, and a *Best store* summary in the Year view.
   - **Compare**: one tap opens the item's search on BigBasket, Blinkit, Zepto, JioMart and Amazon Fresh.
 - **Goals**: counted goals like "96 Fridays", with progress, remaining count and estimated finish. They can start on a future date.
