@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 const STORE_KEY = 'sachin-tracker-v1';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const $ = s => document.querySelector(s);
 
 /* ---------- date helpers (device local time) ---------- */
@@ -18,6 +18,7 @@ const daysBetween = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 864e5);
 const WD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const fmtD = (k, o) => parseKey(k).toLocaleDateString('en-IN', o || { day: 'numeric', month: 'short', year: 'numeric' });
 const fmtDShort = k => fmtD(k, { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtDLong = k => fmtDShort(k) + ' ' + k.slice(0, 4);
 const monthName = (mk, short) => parseKey(mk + '-01').toLocaleDateString('en-IN', short ? { month: 'short' } : { month: 'long', year: 'numeric' });
 const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const money = n => inr.format(Math.round((+n || 0) * 100) / 100);
@@ -29,7 +30,7 @@ const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
 /* ---------- state ---------- */
 let S;
 function blank() {
-  return { version: 1, checklists: [], avoid: { items: [], log: {} }, grocery: { master: [], months: {} }, goals: [], meta: { created: now().toISOString() } };
+  return { version: 1, checklists: [], avoid: { items: [], log: {} }, grocery: { master: [], months: {}, prices: [], lastStore: '' }, stores: defaultStores(), goals: [], meta: { created: now().toISOString() } };
 }
 function normalize(d) {
   const b = blank();
@@ -40,8 +41,11 @@ function normalize(d) {
     avoid: { items: (d.avoid && Array.isArray(d.avoid.items)) ? d.avoid.items : [], log: (d.avoid && d.avoid.log && typeof d.avoid.log === 'object') ? d.avoid.log : {} },
     grocery: { master: (d.grocery && Array.isArray(d.grocery.master)) ? d.grocery.master : [], months: (d.grocery && d.grocery.months && typeof d.grocery.months === 'object') ? d.grocery.months : {} },
     goals: Array.isArray(d.goals) ? d.goals : [],
+    stores: Array.isArray(d.stores) ? d.stores.filter(x => x && x.id && x.name) : defaultStores(),
     meta: d.meta || b.meta
   };
+  o.grocery.prices = (d.grocery && Array.isArray(d.grocery.prices)) ? d.grocery.prices.filter(p => p && p.mid && p.date) : [];
+  o.grocery.lastStore = (d.grocery && typeof d.grocery.lastStore === 'string') ? d.grocery.lastStore : '';
   o.checklists.forEach(c => { c.items = Array.isArray(c.items) ? c.items : []; });
   o.goals.forEach(g => { g.dates = Array.isArray(g.dates) ? g.dates : []; g.prior = +g.prior || 0; g.target = Math.max(1, +g.target || 1); });
   Object.values(o.grocery.months).forEach(m => { m.items = Array.isArray(m.items) ? m.items : []; });
@@ -109,7 +113,7 @@ function formSheet(opts) {
     form.querySelector('[data-x=cancel]').onclick = () => done(null);
     form.onsubmit = e => { e.preventDefault(); const v = {}; new FormData(form).forEach((val, k) => { v[k] = typeof val === 'string' ? val.trim() : val; }); done(v); };
     const first = form.querySelector('input,select');
-    if (first && opts.focus !== false) setTimeout(() => { first.focus(); if (first.select) first.select(); }, 60);
+    if (first && opts.focus !== false) setTimeout(() => { if (form.contains(document.activeElement)) return; first.focus(); if (first.select) first.select(); }, 60);
   });
 }
 const confirmSheet = (title, message, ok, danger) => formSheet({ title, message: esc(message), ok: ok || 'OK', danger: danger !== false, fields: [] }).then(v => !!v);
@@ -349,7 +353,7 @@ function viewGMonth() {
     '<button class="icon-btn ghost" data-act="gMonthNav" data-dir="1" aria-label="Next month" ' + (ki >= keys.length - 1 ? 'disabled' : '') + '>›</button></div>';
   if (!G().master.length) {
     return h + '<div class="empty"><div class="big">🛒</div><div class="bold">Set up your grocery items</div><div class="small">Add the things you usually buy (name, unit, usual price). Every month gets a fresh list from these automatically.</div></div>' +
-      '<div class="fab-row"><button class="btn primary block" data-act="gAddMaster">＋ Add grocery item</button></div>';
+      '<div class="fab-row"><button class="btn primary grow" data-act="gAddMaster">＋ Add grocery item</button><button class="btn grow" data-act="photo" data-testid="add-photo">📷 From photo</button></div>';
   }
   const tt = monthTotals(mo);
   h += '<div class="card summary"><div><div class="small muted">Spent</div><div class="big" id="gSpent" data-testid="g-spent">' + money(tt.spent) + '</div><div class="tiny muted" id="gSpentN">' + plural(tt.nb, 'item') + ' bought</div></div>' +
@@ -371,18 +375,20 @@ function viewGMonth() {
       const active = it.want || it.bought;
       h += '<div class="g-row ' + (it.want ? 'want ' : '') + (it.bought ? 'bought' : '') + '" data-testid="g-row" data-name="' + esc(it.name) + '">' +
         '<button class="g-want" data-act="gWant" data-i="' + i + '" aria-label="Want to buy ' + esc(it.name) + '" aria-pressed="' + !!it.want + '">🛒</button>' +
-        '<div class="g-main"><div class="g-name">' + esc(it.name) + (it.unit ? ' <span class="muted small">· ' + esc(it.unit) + '</span>' : '') + '</div>' +
+        '<div class="g-main"><div class="g-name"><span class="g-open" data-act="gItem" data-i="' + i + '">' + esc(it.name) + (it.unit ? ' <span class="muted small">· ' + esc(it.unit) + '</span>' : '') + '</span>' +
+          '<button class="mini" data-act="gCompare" data-i="' + i + '" aria-label="Compare ' + esc(it.name) + ' online" data-testid="g-compare">Compare</button></div>' +
         (active ? '<div class="g-edit"><input data-chg="gQty" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.qty) + '" aria-label="Quantity of ' + esc(it.name) + '">' +
           '<span class="muted small">× ₹</span><input class="price" data-chg="gPrice" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.price) + '" aria-label="Price per unit of ' + esc(it.name) + '">' +
-          '<span class="g-line" id="gl' + i + '">' + money(lineTotal(it)) + '</span></div>'
-          : '<div class="small muted">' + (num(it.price) ? money(it.price) + (it.unit ? ' / ' + esc(it.unit) : '') : 'No price yet') + '</div>') +
+          '<span class="g-line" id="gl' + i + '">' + money(lineTotal(it)) + '</span></div>' +
+          '<div class="g-store-row"><select class="g-store" data-chg="gStore" data-i="' + i + '" aria-label="Store for ' + esc(it.name) + '">' + storeOptions(it.store) + '</select></div>' + cheapestHint(it)
+          : '<div class="small muted">' + (num(it.price) ? money(it.price) + (it.unit ? ' / ' + esc(it.unit) : '') : 'No price yet') + (() => { const ins = storeInsight(it.mid || it.name); return ins && ins.cheapest ? ' · cheapest ' + esc(storeName(ins.cheapest.store)) + ' ' + money(ins.cheapest.price) : ''; })() + '</div>') +
         '</div><button class="g-check" data-act="gBought" data-i="' + i + '" aria-label="Bought ' + esc(it.name) + '" aria-pressed="' + !!it.bought + '">✓</button></div>';
     });
     h += '</div>';
   }
   const prev = keys[ki - 1];
   if (prev && filter !== 'bought' && !tt.nw && !tt.nb) h += '<div class="center" style="margin-top:8px"><button class="btn sm" data-act="gCopyPlan">⧉ Copy plan from ' + monthName(prev, true) + '</button></div>';
-  h += '<div class="fab-row"><button class="btn block" data-act="gAddMaster">＋ New grocery item</button></div>';
+  h += '<div class="fab-row"><button class="btn grow" data-act="gAddMaster">＋ New item</button><button class="btn primary grow" data-act="photo" data-testid="add-photo">📷 Add from photo</button></div>';
   h += '<div class="tiny muted center">Price is per unit; line total = qty × price. A new month list is created automatically on the 1st.</div>';
   return h;
 }
@@ -428,17 +434,18 @@ function viewGYear() {
     h += '<h2>What I bought in ' + y + '</h2><div class="card" style="padding:4px 10px"><table class="t"><tr><th>Item</th><th class="r">Qty</th><th class="r">Spent</th><th class="r">Price Δ</th></tr>' +
       yd.items.map(a => {
         const f = a.hist[0].price, l = a.hist[a.hist.length - 1].price, ch = f ? (l - f) / f * 100 : 0;
-        return '<tr data-act="gHist" data-key="' + esc(a.key) + '" data-testid="g-year-item" style="cursor:pointer"><td><div class="bold">' + esc(a.name) + '</div><div class="tiny muted">' + plural(a.times, 'month') + ' · now ' + money(l) + (a.unit ? '/' + esc(a.unit) : '') + '</div></td>' +
+        return '<tr data-act="gItemKey" data-key="' + esc(a.key) + '" data-testid="g-year-item" style="cursor:pointer"><td><div class="bold">' + esc(a.name) + '</div><div class="tiny muted">' + plural(a.times, 'month') + ' · now ' + money(l) + (a.unit ? '/' + esc(a.unit) : '') + '</div></td>' +
           '<td class="r">' + (+a.qty.toFixed(2)) + (a.unit ? ' ' + esc(a.unit) : '') + '</td><td class="r bold">' + money(a.spend) + '</td>' +
           '<td class="r ' + (ch > 0.05 ? 'up' : ch < -0.05 ? 'down' : 'muted') + '">' + (a.hist.length > 1 && Math.abs(ch) > 0.05 ? (ch > 0 ? '▲' : '▼') + Math.abs(ch).toFixed(0) + '%' : '—') + '</td></tr>';
-      }).join('') + '</table></div><div class="tiny muted center">Tap an item for its full price history.</div>';
+      }).join('') + '</table></div><div class="tiny muted center">Tap an item for prices by store and history.</div>';
   }
+  h += viewStoreSummary(y);
   return h;
 }
 function priceHistory(key) {
   const out = [];
   Object.keys(G().months).sort().forEach(mk => {
-    G().months[mk].items.forEach(it => { if (it.bought && (it.mid || it.name) === key) out.push({ mk, price: num(it.price), qty: num(it.qty), name: it.name, unit: it.unit }); });
+    G().months[mk].items.forEach(it => { if (it.bought && (it.mid || it.name) === key) out.push({ mk, price: num(it.price), qty: num(it.qty), name: it.name, unit: it.unit, store: it.store || '' }); });
   });
   return out;
 }
@@ -448,7 +455,7 @@ function showHistory(key) {
   let rows = '', prev = null;
   hs.forEach(x => {
     const d = prev ? (x.price - prev) / prev * 100 : null;
-    rows += '<tr data-testid="hist-row"><td>' + monthName(x.mk) + '</td><td class="r">' + x.qty + '</td><td class="r bold">' + money(x.price) + '</td><td class="r ' + (d > 0.05 ? 'up' : d < -0.05 ? 'down' : 'muted') + '">' + (d == null || Math.abs(d) <= 0.05 ? '—' : (d > 0 ? '▲' : '▼') + Math.abs(d).toFixed(1) + '%') + '</td></tr>';
+    rows += '<tr data-testid="hist-row"><td>' + monthName(x.mk) + '<div class="tiny muted">' + esc(storeName(x.store)) + '</div></td><td class="r">' + x.qty + '</td><td class="r bold">' + money(x.price) + '</td><td class="r ' + (d > 0.05 ? 'up' : d < -0.05 ? 'down' : 'muted') + '">' + (d == null || Math.abs(d) <= 0.05 ? '—' : (d > 0 ? '▲' : '▼') + Math.abs(d).toFixed(1) + '%') + '</td></tr>';
     prev = x.price;
   });
   const prices = hs.map(x => x.price);
@@ -466,14 +473,15 @@ function viewGItems() {
   else {
     h += '<div class="card" style="padding:2px 12px">';
     M.slice().sort((a, b) => (a.cat || '~').localeCompare(b.cat || '~') || a.name.localeCompare(b.name)).forEach(m => {
-      h += '<div class="item" data-testid="g-master"><div class="txt" data-act="gEditMaster" data-id="' + m.id + '" style="cursor:pointer;padding-left:4px"><div class="bold">' + esc(m.name) + '</div><div class="small muted">' +
+      h += '<div class="item" data-testid="g-master"><div class="txt" data-act="gItemKey" data-key="' + m.id + '" style="cursor:pointer;padding-left:4px"><div class="bold">' + esc(m.name) + '</div><div class="small muted">' +
         (m.cat ? esc(m.cat) + ' · ' : '') + (num(m.price) ? money(m.price) : '—') + (m.unit ? ' / ' + esc(m.unit) : '') + '</div></div>' +
         '<button class="icon-btn ghost sm" data-act="gEditMaster" data-id="' + m.id + '" aria-label="Edit ' + esc(m.name) + '">✏️</button>' +
         '<button class="icon-btn ghost sm" data-act="gDelMaster" data-id="' + m.id + '" aria-label="Delete ' + esc(m.name) + '">✕</button></div>';
     });
     h += '</div>';
   }
-  h += '<div class="fab-row"><button class="btn primary block" data-act="gAddMaster">＋ Add grocery item</button></div>';
+  h += '<div class="fab-row"><button class="btn primary grow" data-act="gAddMaster">＋ Add grocery item</button><button class="btn grow" data-act="photo">📷 From photo</button></div>';
+  h += '<div class="fab-row"><button class="btn block" data-act="stores" data-testid="manage-stores">🏪 Manage stores (' + S.stores.length + ')</button></div>';
   return h;
 }
 function masterFields(m) {
@@ -522,45 +530,56 @@ async function gDelMaster(id) {
    GOALS (counted)
    ===================================================================== */
 const isWeekly = g => g.weekday != null && g.weekday !== '';
+const goalStart = g => g.start || todayKey();
+const firstOnOrAfter = (k, wd) => addDays(k, (wd - parseKey(k).getDay() + 7) % 7);
 function goalDone(g) { return g.dates.length + (g.prior || 0); }
+/* First day that can count: the start date, or for weekly goals the first matching weekday on/after it. */
+const goalFirstDay = g => isWeekly(g) ? firstOnOrAfter(goalStart(g), +g.weekday) : goalStart(g);
+const goalNotStarted = g => goalStart(g) > todayKey();
 function nextOccurrence(g) {
   if (!isWeekly(g)) return null;
   const t = todayKey(), diff = (g.weekday - parseKey(t).getDay() + 7) % 7;
   let k = addDays(t, diff);
   if (diff === 0 && g.dates.includes(t)) k = addDays(t, 7);
-  return k;
+  const first = goalFirstDay(g);
+  return first > k ? first : k;
 }
 function lastOccurrence(g) { const t = todayKey(); return addDays(t, -((parseKey(t).getDay() - g.weekday + 7) % 7)); }
 function goalStats(g) {
+  const t = todayKey(), start = goalStart(g), notStarted = start > t;
   const done = goalDone(g), target = g.target, remaining = Math.max(0, target - done);
   const pct = Math.min(100, done / target * 100);
   const weekly = isWeekly(g);
-  let est = null, missed = 0;
+  let est = null, estEarliest = false, missed = 0;
   if (remaining > 0) {
     if (weekly) est = addDays(nextOccurrence(g), (remaining - 1) * 7);
+    else if (notStarted) { est = addDays(start, remaining - 1); estEarliest = true; }
     else if (g.dates.length >= 2) {
       const ds = g.dates.slice().sort(), span = Math.max(1, daysBetween(ds[0], ds[ds.length - 1]));
-      est = addDays(todayKey(), Math.ceil(remaining * span / (ds.length - 1)));
+      est = addDays(t, Math.ceil(remaining * span / (ds.length - 1)));
     }
   }
-  if (weekly) {
+  if (weekly && !notStarted) {
     const sorted = g.dates.slice().sort();
-    let start = g.start || todayKey();
-    if (sorted[0] && sorted[0] < start) start = sorted[0];
-    let d = addDays(start, (g.weekday - parseKey(start).getDay() + 7) % 7);
-    const t = todayKey();
+    let s = start;
+    if (sorted[0] && sorted[0] < s) s = sorted[0];
+    let d = firstOnOrAfter(s, +g.weekday);
     while (d < t) { if (!g.dates.includes(d)) missed++; d = addDays(d, 7); }
   }
-  return { done, target, remaining, pct, est, missed, weekly };
+  return { done, target, remaining, pct, est, estEarliest, missed, weekly, notStarted, start, firstDay: goalFirstDay(g), daysToStart: notStarted ? daysBetween(t, start) : 0 };
 }
+const startsInText = st => 'Starts ' + (st.daysToStart === 1 ? 'tomorrow' : 'in ' + st.daysToStart + ' days') + ' · ' + fmtDLong(st.start);
 function goalPrimary(g) {
-  const t = todayKey();
+  const t = todayKey(), st = goalStats(g);
+  if (st.notStarted) {
+    return '<button class="btn block" disabled data-testid="goal-primary">⏳ First ' + (st.weekly ? WD[g.weekday] : 'day') + ': ' + fmtDShort(st.firstDay) + '</button>';
+  }
   if (!isWeekly(g) || parseKey(t).getDay() === +g.weekday) {
     const on = g.dates.includes(t);
     return '<button class="btn ' + (on ? '' : 'primary') + ' block" data-act="goalToggle" data-id="' + g.id + '" data-day="' + t + '" data-testid="goal-primary">' + (on ? '✓ Done today · tap to undo' : '＋ Mark today done') + '</button>';
   }
   const last = lastOccurrence(g);
-  if (!g.dates.includes(last) && last >= (g.start || '0000')) {
+  if (!g.dates.includes(last) && last >= goalStart(g)) {
     return '<button class="btn primary block" data-act="goalToggle" data-id="' + g.id + '" data-day="' + last + '" data-testid="goal-primary">＋ Mark last ' + WD[g.weekday] + ' (' + fmtD(last, { day: 'numeric', month: 'short' }) + ')</button>';
   }
   return '<button class="btn block" disabled data-testid="goal-primary">Next: ' + fmtDShort(nextOccurrence(g)) + '</button>';
@@ -576,12 +595,14 @@ function viewGoals() {
   S.goals.forEach((x, i) => {
     const st = goalStats(x);
     h += '<div class="card" data-testid="goal-card"><div class="goal-head"><div class="grow ' + (ui.reorder ? '' : 'tap') + '" ' + (ui.reorder ? '' : 'data-act="openGoal" data-id="' + x.id + '"') + '><h3>' + esc(x.name) + '</h3>' +
-      (st.weekly ? '<span class="badge">Every ' + WD[x.weekday] + '</span>' : '<span class="badge">Any day</span>') + '</div>' +
+      (st.weekly ? '<span class="badge">Every ' + WD[x.weekday] + '</span>' : '<span class="badge">Any day</span>') +
+      (st.notStarted ? ' <span class="badge soon" data-testid="goal-soon">Upcoming</span>' : '') + '</div>' +
       (ui.reorder ? reorderBtns('goal', x.id, i, S.goals.length) : '<button class="icon-btn ghost" data-act="goalMenu" data-id="' + x.id + '" aria-label="Goal options">⋯</button>') + '</div>';
     if (!ui.reorder) {
       h += '<div class="goal-nums"><b data-testid="goal-count">' + st.done + '</b><span class="muted">/ ' + st.target + '</span><span class="grow"></span><span class="bold" data-testid="goal-pct">' + Math.floor(st.pct) + '%</span></div>' +
         '<div class="progress"><i style="width:' + st.pct + '%"></i></div>' +
-        '<div class="small muted" style="margin-top:6px">' + (st.remaining ? st.remaining + ' to go' + (st.est ? ' · est. finish ' + fmtD(st.est) : '') : '🎉 Target reached!') + '</div>' +
+        (st.notStarted ? '<div class="small soon-text" style="margin-top:6px" data-testid="goal-starts">⏳ ' + startsInText(st) + '</div>' : '') +
+        '<div class="small muted" style="margin-top:' + (st.notStarted ? 2 : 6) + 'px" data-testid="goal-summary">' + (st.remaining ? st.remaining + ' to go' + (st.est ? ' · ' + (st.estEarliest ? 'earliest finish ' : 'est. finish ') + fmtD(st.est) : '') : '🎉 Target reached!') + '</div>' +
         '<div class="goal-mark">' + goalPrimary(x) + '</div>';
     }
     h += '</div>';
@@ -592,16 +613,20 @@ function viewGoals() {
 function viewGoalDetail(g) {
   const st = goalStats(g), t = todayKey();
   let h = '<div class="row between" style="margin:2px 0 6px"><button class="btn sm" data-act="closeGoal">‹ All goals</button><button class="icon-btn ghost" data-act="goalMenu" data-id="' + g.id + '" aria-label="Goal options">⋯</button></div>';
-  h += '<div class="card"><h3 class="center">' + esc(g.name) + '</h3><div class="center" style="margin:4px 0">' + (st.weekly ? '<span class="badge">Every ' + WD[g.weekday] + '</span>' : '<span class="badge">Any day</span>') + '</div>' +
+  h += '<div class="card"><h3 class="center">' + esc(g.name) + '</h3><div class="center" style="margin:4px 0">' + (st.weekly ? '<span class="badge">Every ' + WD[g.weekday] + '</span>' : '<span class="badge">Any day</span>') +
+    (st.notStarted ? ' <span class="badge soon">Upcoming</span>' : '') + '</div>' +
     '<div class="ring" style="--p:' + st.pct + '"><div data-testid="goal-ring">' + Math.floor(st.pct) + '%</div></div>' +
+    (st.notStarted ? '<div class="note center" data-testid="goal-starts-detail">⏳ ' + startsInText(st) + '</div>' : '') +
     '<div class="progress"><i style="width:' + st.pct + '%"></i></div>' +
     '<div class="kv" style="margin-top:12px"><span>Done</span><span data-testid="goal-done">' + st.done + ' / ' + st.target + '</span><span>Remaining</span><span data-testid="goal-remaining">' + st.remaining + '</span>' +
     (g.prior ? '<span>Counted before app</span><span>' + g.prior + '</span>' : '') +
-    '<span>Started</span><span>' + fmtD(g.start || t) + '</span>' +
-    (st.weekly ? '<span>Missed ' + WD[g.weekday] + 's</span><span data-testid="goal-missed">' + st.missed + '</span>' : '') +
-    '<span>Estimated finish</span><span data-testid="goal-est">' + (st.remaining ? (st.est ? fmtD(st.est) : '—') : 'Done 🎉') + '</span></div>' +
+    '<span>' + (st.notStarted ? 'Starts' : 'Started') + '</span><span data-testid="goal-start">' + fmtD(st.start) + '</span>' +
+    (st.notStarted && st.weekly && st.firstDay !== st.start ? '<span>First ' + WD[g.weekday] + '</span><span>' + fmtD(st.firstDay) + '</span>' : '') +
+    (st.weekly && !st.notStarted ? '<span>Missed ' + WD[g.weekday] + 's</span><span data-testid="goal-missed">' + st.missed + '</span>' : '') +
+    '<span>' + (st.estEarliest ? 'Earliest finish' : 'Estimated finish') + '</span><span data-testid="goal-est">' + (st.remaining ? (st.est ? fmtD(st.est) : '—') : 'Done 🎉') + '</span></div>' +
     '<div class="goal-mark">' + goalPrimary(g) + '</div>' +
-    '<form class="add-form" data-form="goalDate" style="margin-top:10px"><input class="field" type="date" name="day" max="' + t + '" value="' + t + '" aria-label="Pick a date"><button class="btn" type="submit">Mark date</button></form></div>';
+    (st.notStarted ? '<div class="tiny muted center" style="margin-top:8px">You can start marking from ' + fmtD(st.firstDay) + '.</div>' :
+      '<form class="add-form" data-form="goalDate" style="margin-top:10px"><input class="field" type="date" name="day" max="' + t + '" value="' + t + '" aria-label="Pick a date"><button class="btn" type="submit">Mark date</button></form>') + '</div>';
   const done = st.done, cells = Math.min(g.target, 400);
   h += '<div class="card"><div class="row between"><h3>Progress grid</h3><span class="small muted">' + done + ' of ' + g.target + '</span></div><div class="grid">';
   for (let i = 1; i <= cells; i++) h += '<i class="' + (i <= done ? 'on' : '') + '">' + i + '</i>';
@@ -616,15 +641,18 @@ function goalFields(g) {
     { name: 'name', label: 'Goal', value: g ? g.name : '', placeholder: 'e.g. Fast on Fridays', required: true },
     { name: 'target', label: 'Target count', value: g ? g.target : 96, type: 'number', min: 1, step: 1, inputmode: 'numeric', required: true },
     { name: 'weekday', label: 'Repeat on', type: 'select', value: g && isWeekly(g) ? g.weekday : '', options: [['', 'Any day (no fixed weekday)']].concat(WD.map((w, i) => [String(i), 'Every ' + w])) },
-    { name: 'start', label: 'Start date', type: 'date', value: g ? (g.start || todayKey()) : todayKey(), max: todayKey() },
+    { name: 'start', label: 'Start date', type: 'date', value: g ? goalStart(g) : todayKey(), hint: 'Can be in the future — the goal waits until then.' },
     { name: 'prior', label: 'Already done before using the app', type: 'number', min: 0, step: 1, inputmode: 'numeric', value: g ? g.prior || 0 : 0, hint: 'Counts toward the target without dates.' }
   ];
 }
+const validDay = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
 async function newGoal() {
   const r = await formSheet({ title: 'New goal', fields: goalFields(null), ok: 'Create' });
   if (!r || !r.name) return;
-  S.goals.push({ id: uid(), name: r.name, target: Math.max(1, parseInt(r.target, 10) || 1), weekday: r.weekday === '' ? null : +r.weekday, start: r.start || todayKey(), prior: Math.max(0, parseInt(r.prior, 10) || 0), dates: [], created: now().toISOString() });
-  save(); render(); toast('Goal created');
+  const g = { id: uid(), name: r.name, target: Math.max(1, parseInt(r.target, 10) || 1), weekday: r.weekday === '' ? null : +r.weekday, start: validDay(r.start) ? r.start : todayKey(), prior: Math.max(0, parseInt(r.prior, 10) || 0), dates: [], created: now().toISOString() };
+  S.goals.push(g);
+  save(); render();
+  toast(goalNotStarted(g) ? 'Goal created · starts ' + fmtD(g.start, { day: 'numeric', month: 'short' }) : 'Goal created');
 }
 async function goalMenu(id) {
   const g = S.goals.find(x => x.id === id); if (!g) return;
@@ -632,7 +660,11 @@ async function goalMenu(id) {
   if (v === 'edit') {
     const r = await formSheet({ title: 'Edit goal', fields: goalFields(g) });
     if (!r || !r.name) return;
-    Object.assign(g, { name: r.name, target: Math.max(1, parseInt(r.target, 10) || 1), weekday: r.weekday === '' ? null : +r.weekday, start: r.start || g.start, prior: Math.max(0, parseInt(r.prior, 10) || 0) });
+    const newStart = validDay(r.start) ? r.start : goalStart(g);
+    const before = g.dates.filter(d => d < newStart);
+    if (before.length && !await confirmSheet('Remove ' + plural(before.length, 'earlier date') + '?', 'The new start date is ' + fmtD(newStart) + '. Dates marked before it will be removed.', 'Remove & save')) return;
+    Object.assign(g, { name: r.name, target: Math.max(1, parseInt(r.target, 10) || 1), weekday: r.weekday === '' ? null : +r.weekday, start: newStart, prior: Math.max(0, parseInt(r.prior, 10) || 0) });
+    g.dates = g.dates.filter(d => d >= newStart);
     save(); render();
   } else if (v === 'reorder') { ui.goalId = null; ui.reorder = true; render(); }
   else if (v === 'del') {
@@ -644,9 +676,15 @@ async function goalMenu(id) {
 }
 async function goalMark(g, day) {
   const t = todayKey();
-  if (!day) return;
+  if (!validDay(day)) return;
   if (day > t) { toast('Can’t mark a future date'); return; }
   if (g.dates.includes(day)) { toast(fmtD(day) + ' is already marked'); return; }
+  const start = goalStart(g);
+  if (day < start) {
+    if (start > t) { toast('This goal starts on ' + fmtD(start)); return; }
+    if (!await confirmSheet('Before the start date', 'This goal starts on ' + fmtD(start) + '. Move the start to ' + fmtD(day) + ' and count it?', 'Move start & count', false)) return;
+    g.start = day;
+  }
   if (isWeekly(g) && parseKey(day).getDay() !== +g.weekday) {
     if (!await confirmSheet('Not a ' + WD[g.weekday], fmtDShort(day) + ' is a ' + WD[parseKey(day).getDay()] + '. Count it anyway?', 'Count it', false)) return;
   }
@@ -654,6 +692,612 @@ async function goalMark(g, day) {
   g.dates.push(day); g.dates.sort(); save(); render();
   if (before < g.target && goalDone(g) >= g.target) toast('🎉 Target reached: ' + g.name);
   else toast('Marked ' + fmtD(day, { day: 'numeric', month: 'short' }) + ' · ' + goalDone(g) + '/' + g.target, 'Undo', () => { g.dates = g.dates.filter(d => d !== day); save(); render(); });
+}
+
+/* =====================================================================
+   STORES · COMPARE · PRICE INSIGHTS
+   ===================================================================== */
+const DEFAULT_STORES = ['Mall', 'BigBasket', 'Blinkit', 'Zepto', 'JioMart', 'Amazon Fresh', 'Local kirana'];
+const defaultStores = () => DEFAULT_STORES.map((n, i) => ({ id: 's' + (i + 1), name: n }));
+// Search URL formats verified Oct 2026 (Blinkit/Zepto/Amazon loaded live; BigBasket/JioMart from published examples).
+const COMPARE_SITES = [
+  ['BigBasket', q => 'https://www.bigbasket.com/ps/?q=' + q + '&nc=as', '#84c225'],
+  ['Blinkit', q => 'https://blinkit.com/s/?q=' + q, '#f8cb46'],
+  ['Zepto', q => 'https://www.zepto.com/search?query=' + q, '#7b2ff7'],
+  ['JioMart', q => 'https://www.jiomart.com/search/' + q, '#0078ad'],
+  ['Amazon Fresh', q => 'https://www.amazon.in/s?k=' + q + '&i=nowstore', '#ff9900']
+];
+const searchTerm = name => encodeURIComponent(String(name || '').replace(new RegExp(SIZE_RE.source, 'gi'), ' ').replace(/\s{2,}/g, ' ').trim() || String(name || '').trim());
+function compareLinks(name, cls) {
+  const q = searchTerm(name);
+  return '<div class="cmp-grid ' + (cls || '') + '">' + COMPARE_SITES.map(([n, f, c]) =>
+    '<a class="cmp" href="' + esc(f(q)) + '" target="_blank" rel="noopener noreferrer" data-testid="cmp-link" style="--c:' + c + '"><i></i>' + esc(n) + ' <span aria-hidden="true">↗</span></a>').join('') + '</div>';
+}
+const storeById = id => S.stores.find(s => s.id === id);
+const storeName = id => (id && storeById(id)) ? storeById(id).name : 'Unknown store';
+function storeOptions(sel) {
+  const known = sel && storeById(sel);
+  return '<option value=""' + (!known ? ' selected' : '') + '>Unknown store</option>' + S.stores.map(s => '<option value="' + esc(s.id) + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + '</option>').join('');
+}
+const boughtDate = mk => mk === curMonthKey() ? todayKey() : (mk + '-28' < todayKey() ? mk + '-28' : todayKey());
+/* All price observations for an item: bought lines (per month) + prices recorded manually. */
+function itemObservations(key) {
+  const out = [];
+  Object.keys(G().months).sort().forEach(mk => G().months[mk].items.forEach(it => {
+    if (it.bought && num(it.price) > 0 && (it.mid || it.name) === key) out.push({ date: it.boughtOn || mk + '-28', mk, store: it.store || '', price: num(it.price), qty: num(it.qty), src: 'bought' });
+  }));
+  (G().prices || []).forEach(p => { if (p.mid === key && num(p.price) > 0) out.push({ date: p.date, mk: p.date.slice(0, 7), store: p.store || '', price: num(p.price), src: 'seen', id: p.id }); });
+  return out.sort((a, b) => a.date.localeCompare(b.date) || (a.src === 'bought' ? -1 : 1));
+}
+/* Latest price per store, cheapest store, and saving vs. where it was last bought. */
+function storeInsight(key) {
+  const obs = itemObservations(key); if (!obs.length) return null;
+  const latest = {};
+  obs.forEach(o => { const s = o.store && storeById(o.store) ? o.store : ''; latest[s] = o; });
+  let cheapest = null;
+  Object.keys(latest).filter(Boolean).forEach(s => { const o = latest[s]; if (!cheapest || o.price < cheapest.price) cheapest = { store: s, price: o.price, date: o.date }; });
+  const lastBuy = obs.slice().reverse().find(o => o.src === 'bought') || null;
+  const lastStore = lastBuy && lastBuy.store && storeById(lastBuy.store) ? lastBuy.store : '';
+  const saving = cheapest && lastBuy && lastStore !== cheapest.store && lastBuy.price > cheapest.price ? r2(lastBuy.price - cheapest.price) : 0;
+  return { latest, cheapest, lastBuy, lastStore, saving, nStores: Object.keys(latest).filter(Boolean).length };
+}
+function cheapestHint(it) {
+  const ins = storeInsight(it.mid || it.name);
+  if (!ins || !ins.cheapest || ins.nStores < 1) return '';
+  const cur = num(it.price), cs = ins.cheapest;
+  if ((it.store || '') === cs.store || !(cur > cs.price + 0.004)) return ins.nStores > 1 && (it.store || '') === cs.store ? '<div class="hint good">⭐ Cheapest store</div>' : '';
+  return '<div class="hint" data-testid="cheap-hint">💡 ' + esc(storeName(cs.store)) + ' ' + money(cs.price) + ' · save ' + money(cur - cs.price) + (it.unit ? '/' + esc(it.unit) : '/unit') + '</div>';
+}
+function compareSheet(name) {
+  $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Compare prices" data-testid="compare-sheet"><div class="grab"></div><h3>Compare “' + esc(name) + '”</h3>' +
+    '<div class="small muted">Opens each store’s search in a new tab. Note the price you find with “Record a price” to track the cheapest store.</div>' +
+    compareLinks(name) + '<div class="actions"><button class="btn block" type="button" data-close>Close</button></div></div></div>';
+  const bg = $('#sheetRoot .sheet-bg');
+  bg.addEventListener('click', e => { if (e.target === bg || e.target.closest('[data-close]')) closeSheet(); });
+}
+/* Item detail: compare links, latest price per store, cheapest + saving, record a price. */
+function itemSheet(key) {
+  const m = G().master.find(x => x.id === key);
+  const obs = itemObservations(key);
+  const lastRow = (() => { for (const mk of Object.keys(G().months).sort().reverse()) { const r = G().months[mk].items.find(it => (it.mid || it.name) === key); if (r) return r; } return null; })();
+  const name = m ? m.name : (lastRow ? lastRow.name : key), unit = m ? m.unit : (lastRow ? lastRow.unit : '');
+  const ins = storeInsight(key);
+  let rows = '';
+  if (ins) {
+    Object.keys(ins.latest).sort((a, b) => (!a - !b) || ins.latest[a].price - ins.latest[b].price).forEach(s => {
+      const o = ins.latest[s], best = ins.cheapest && ins.cheapest.store === s;
+      rows += '<tr data-testid="store-row"' + (best ? ' class="best"' : '') + '><td>' + (best ? '⭐ ' : '') + esc(storeName(s)) + '</td><td class="r bold">' + money(o.price) + '</td><td class="r tiny muted">' + fmtD(o.date, { day: 'numeric', month: 'short', year: '2-digit' }) + (o.src === 'seen' ? ' · seen' : '') + '</td></tr>';
+    });
+  }
+  let saving = '';
+  if (ins && ins.lastBuy) {
+    saving = '<div class="note small" data-testid="saving-note">Last bought at <b>' + esc(storeName(ins.lastStore)) + '</b> for ' + money(ins.lastBuy.price) + (unit ? '/' + esc(unit) : '') + '.' +
+      (ins.saving ? ' Cheapest seen: <b>' + esc(storeName(ins.cheapest.store)) + '</b> ' + money(ins.cheapest.price) + ' → save <b>' + money(ins.saving) + '</b> per ' + esc(unit || 'unit') +
+        (ins.lastBuy.qty > 1 ? ' (' + money(ins.saving * ins.lastBuy.qty) + ' on ' + (+ins.lastBuy.qty.toFixed(2)) + ' ' + esc(unit || 'units') + ')' : '') + '.' : (ins.cheapest && ins.nStores > 1 && ins.cheapest.store === ins.lastStore ? (ins.cheapest.price < ins.lastBuy.price - 0.004 ? ' It’s now ' + money(ins.cheapest.price) + ' there — still' : ' That’s') + ' the cheapest store you’ve seen. 👍' : '')) + '</div>';
+  }
+  $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet tall" role="dialog" aria-label="Item details" data-testid="item-sheet"><div class="grab"></div>' +
+    '<h3>' + esc(name) + (unit ? ' <span class="muted small">· ' + esc(unit) + '</span>' : '') + '</h3>' +
+    '<div class="small bold" style="margin-top:8px">Compare online</div>' + compareLinks(name) +
+    '<div class="small bold" style="margin-top:14px">Latest price per store <span class="muted tiny">(per ' + esc(unit || 'unit') + ')</span></div>' +
+    (rows ? '<table class="t" style="margin-top:4px">' + rows + '</table>' : '<div class="small muted" style="margin:6px 0">No prices yet. Mark it bought with a store, or record a price below.</div>') + saving +
+    '<form class="rec-form" data-x="rec"><select class="field" name="store" aria-label="Store">' + storeOptions(G().lastStore) + '</select>' +
+    '<input class="field" name="price" type="number" inputmode="decimal" step="any" min="0" placeholder="₹ per ' + esc(unit || 'unit') + '" aria-label="Price seen" required>' +
+    '<button class="btn" type="submit">Record</button></form>' +
+    '<div class="tiny muted">Record a price you saw (in a shop or online) without buying.</div>' +
+    '<div class="actions">' + (m ? '<button class="btn" type="button" data-x="edit">✏️ Edit item</button>' : '') + (obs.some(o => o.src === 'bought') ? '<button class="btn" type="button" data-x="hist">History</button>' : '') +
+    '<button class="btn primary" type="button" data-close>Close</button></div></div></div>';
+  const bg = $('#sheetRoot .sheet-bg');
+  bg.addEventListener('click', e => {
+    if (e.target === bg || e.target.closest('[data-close]')) closeSheet();
+    else if (e.target.closest('[data-x=edit]')) { closeSheet(); gEditMaster(key); }
+    else if (e.target.closest('[data-x=hist]')) showHistory(key);
+  });
+  bg.querySelector('form').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = e.target, price = num(f.price.value), store = f.store.value;
+    if (!(price > 0)) return;
+    G().prices.push({ id: uid(), mid: key, store, price, date: todayKey() });
+    if (store) G().lastStore = store;
+    save(); itemSheet(key); render(); toast('Recorded ' + money(price) + ' at ' + storeName(store));
+  });
+}
+function storesSheet() {
+  const rows = S.stores.map(s => '<div class="item" data-testid="store-item"><div class="txt" style="padding-left:6px">' + esc(s.name) + '</div>' +
+    '<button type="button" class="icon-btn ghost sm" data-sx="ren" data-id="' + s.id + '" aria-label="Rename ' + esc(s.name) + '">✏️</button>' +
+    '<button type="button" class="icon-btn ghost sm" data-sx="del" data-id="' + s.id + '" aria-label="Delete ' + esc(s.name) + '">✕</button></div>').join('');
+  $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet tall" role="dialog" aria-label="Stores" data-testid="stores-sheet"><div class="grab"></div><h3>🏪 My stores</h3>' +
+    '<div class="small muted">Pick these when you enter a price. Deleting a store keeps old prices (shown as “Unknown store”).</div>' +
+    '<div class="card" style="padding:2px 10px;margin-top:10px">' + (rows || '<div class="empty small">No stores.</div>') + '</div>' +
+    '<form class="add-form" data-x="add"><input class="field" name="name" placeholder="Add a store (e.g. DMart)" autocomplete="off" aria-label="New store"><button class="btn primary" type="submit">Add</button></form>' +
+    '<div class="actions"><button class="btn block" type="button" data-close>Done</button></div></div></div>';
+  const bg = $('#sheetRoot .sheet-bg');
+  bg.addEventListener('click', async e => {
+    if (e.target === bg || e.target.closest('[data-close]')) { closeSheet(); render(); return; }
+    const b = e.target.closest('[data-sx]'); if (!b) return;
+    const st = storeById(b.dataset.id); if (!st) return;
+    if (b.dataset.sx === 'ren') {
+      const r = await formSheet({ title: 'Rename store', fields: [{ name: 'name', label: 'Store name', value: st.name, required: true }] });
+      if (r && r.name) { st.name = r.name; save(); }
+      storesSheet();
+    } else {
+      const ok = await confirmSheet('Delete “' + st.name + '”?', 'Prices recorded at this store will show as “Unknown store”.', 'Delete');
+      if (ok) { S.stores = S.stores.filter(x => x.id !== st.id); if (G().lastStore === st.id) G().lastStore = ''; save(); }
+      storesSheet();
+    }
+  });
+  bg.querySelector('form').addEventListener('submit', e => {
+    e.preventDefault(); const v = e.target.name.value.trim(); if (!v) return;
+    if (S.stores.some(x => x.name.toLowerCase() === v.toLowerCase())) { toast('“' + v + '” already exists'); return; }
+    S.stores.push({ id: uid(), name: v }); save(); storesSheet();
+    const inp = document.querySelector('[data-testid=stores-sheet] input[name=name]'); if (inp) inp.focus();
+  });
+}
+/* Year insights: spend by store, cheapest store tally, potential savings. */
+function storeYearSummary(y) {
+  const spend = {}, cache = {};
+  for (let m = 1; m <= 12; m++) {
+    const mo = G().months[y + '-' + pad(m)]; if (!mo) continue;
+    mo.items.forEach(it => {
+      if (!it.bought) return;
+      const s = it.store && storeById(it.store) ? it.store : '';
+      spend[s] = (spend[s] || 0) + lineTotal(it);
+      const key = it.mid || it.name;
+      if (cache[key] === undefined) cache[key] = { name: it.name, unit: it.unit, ins: storeInsight(key) };
+    });
+  }
+  // Potential saving = for each item, (last price paid − cheapest store's latest price) × last quantity,
+  // i.e. what switching would save on your next usual purchase. Not a backward-looking guess.
+  const items = Object.values(cache).filter(c => c.ins);
+  const top = items.filter(c => c.ins.saving > 0).map(c => ({ name: c.name, unit: c.unit, cheapest: c.ins.cheapest, lastStore: c.ins.lastStore, lastPrice: c.ins.lastBuy.price,
+    saving: r2(c.ins.saving * Math.max(1, num(c.ins.lastBuy.qty))) })).sort((a, b) => b.saving - a.saving);
+  const tally = {};
+  items.forEach(c => { if (c.ins.cheapest && c.ins.nStores > 1) tally[c.ins.cheapest.store] = (tally[c.ins.cheapest.store] || 0) + 1; });
+  const compared = items.filter(c => c.ins.nStores > 1).length;
+  const best = Object.keys(tally).sort((a, b) => tally[b] - tally[a])[0];
+  return { spend, potential: r2(top.reduce((t, x) => t + x.saving, 0)), nSave: top.length, tally, best, compared, top: top.slice(0, 5) };
+}
+function viewStoreSummary(y) {
+  const ss = storeYearSummary(y);
+  const total = Object.values(ss.spend).reduce((a, b) => a + b, 0);
+  if (!total && !ss.compared) return '';
+  let h = '<h2>Best store</h2><div class="card" data-testid="best-store">';
+  if (ss.best) h += '<div class="row"><div style="font-size:2rem">🏆</div><div class="grow"><div class="bold" style="font-size:1.1rem" data-testid="best-store-name">' + esc(storeName(ss.best)) + '</div><div class="small muted">cheapest for ' + ss.tally[ss.best] + ' of ' + plural(ss.compared, 'item') + ' you’ve priced at 2+ stores</div></div></div>';
+  else h += '<div class="small muted">Enter prices with a store (or “Record a price” on an item) at 2+ stores to see where things are cheapest.</div>';
+  if (ss.potential > 0.5) h += '<div class="note" data-testid="potential-saving">Buying ' + (ss.nSave === 1 ? 'this item' : 'these ' + ss.nSave + ' items') + ' at the cheapest store you’ve seen would save about <b>' + money(Math.round(ss.potential)) + '</b> on your next usual shop.</div>';
+  if (ss.top.length) h += '<table class="t" style="margin-top:6px"><tr><th>Item</th><th>Buy at</th><th class="r">Save</th></tr>' + ss.top.map(t =>
+    '<tr><td><div class="bold">' + esc(t.name) + '</div><div class="tiny muted">' + esc(storeName(t.lastStore)) + ' ' + money(t.lastPrice) + ' → ' + money(t.cheapest.price) + '</div></td><td>' + esc(storeName(t.cheapest.store)) + '</td><td class="r bold">' + money(t.saving) + '</td></tr>').join('') + '</table>';
+  if (total) {
+    const max = Math.max.apply(null, Object.values(ss.spend));
+    h += '<div class="small bold" style="margin-top:12px">Spend by store</div>' + Object.keys(ss.spend).sort((a, b) => ss.spend[b] - ss.spend[a]).map(s =>
+      '<div class="sbar"><span>' + esc(storeName(s)) + '</span><i style="width:' + (ss.spend[s] / max * 100) + '%"></i><b>' + money(ss.spend[s]) + '</b></div>').join('');
+  }
+  return h + '</div>';
+}
+
+/* =====================================================================
+   PHOTO → GROCERY ITEMS (in-browser OCR with vendored Tesseract.js)
+   ===================================================================== */
+const OCR_BASE = 'vendor/tesseract/';
+const UNIT_WORDS = { kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg', g: 'g', gm: 'g', gms: 'g', gr: 'g', gram: 'g', grams: 'g', l: 'litre', lt: 'litre', ltr: 'litre', ltrs: 'litre', litre: 'litre', litres: 'litre', liter: 'litre', liters: 'litre', ml: 'ml',
+  pc: 'pc', pcs: 'pc', piece: 'pc', pieces: 'pc', pkt: 'packet', pkts: 'packet', packet: 'packet', packets: 'packet', pack: 'packet', packs: 'packet', dozen: 'dozen', doz: 'dozen', dz: 'dozen', nos: 'pc', no: 'pc', bunch: 'bunch', bunches: 'bunch', box: 'box', bottle: 'bottle', bottles: 'bottle', can: 'can', tin: 'tin', bag: 'bag', jar: 'jar' };
+const UNIT_RE_SRC = Object.keys(UNIT_WORDS).sort((a, b) => b.length - a.length).join('|');
+const SIZE_RE = new RegExp('(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')\\b\\.?', 'i');
+const SKIP_RE = /\b(sub\s*-?\s*total|total|grand|net\s*(amt|amount|payable|value)|amount\s*(due|paid|payable|in\s*words)|gst|cgst|sgst|igst|utgst|vat|tax|taxable|cess|round(ed)?\s*-?\s*off|discount|disc|saving|savings|saved|change|cash|card|upi|paytm|gpay|phonepe|tender(ed)?|paid|balance|bill|invoice|inv|receipt|token|table|cashier|counter|date|time|phone|ph|mob(ile)?|tel|contact|gstin|fssai|cin|thank|thanks|visit|again|welcome|www|http|email|address|road|street|nagar|layout|cross|main\s*rd|pin\s*code|hsn|sac|description|particulars|sl|s\.?\s*no|qty|rate|mrp\s*total|items?\s*count|no\s*of\s*items|customer|terms|conditions|exchange|refund|e\s*&\s*o\.?\s*e)\b/i;
+const LIST_HEADER_RE = /^(my\s+)?(shopping|grocery|groceries|kirana|to\s*buy|buy|list|items?|things\s+to\s+buy)(\s+list)?\s*[:\-]?\s*$/i;
+const SYNONYMS = { tur: 'toor', arhar: 'toor', toovar: 'toor', dahi: 'curd', yogurt: 'curd', yoghurt: 'curd', chili: 'chilli', chilly: 'chilli', dhania: 'coriander', jeera: 'cumin', bhindi: 'okra', baingan: 'brinjal', eggplant: 'brinjal', aloo: 'potato', alu: 'potato', pyaz: 'onion', pyaaz: 'onion', tamatar: 'tomato', chawal: 'rice', doodh: 'milk', cheeni: 'sugar', namak: 'salt', haldi: 'turmeric', maida: 'flour', capsicum: 'capsicum', curd: 'curd' };
+const STOP = new Set(['fresh', 'organic', 'premium', 'loose', 'the', 'of', 'and', 'pack', 'packet', 'pkt', 'new', 'special', 'pure', 'best', 'quality', 'super', 'regular', 'local']);
+
+function fixNumToken(tok) {
+  // OCR confusions inside numbers: O/o→0, l/I/|→1, S→5, B→8; strip currency marks; "1,234.00" → "1234.00"
+  let t = tok.replace(/^(₹|rs\.?|inr|%|=|~)/i, '').replace(/[/-]$/, '');
+  if (!/\d/.test(t)) return null;
+  if (!/^[\dOolI|SB.,]+$/.test(t)) return null;
+  t = t.replace(/[Oo]/g, '0').replace(/[lI|]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
+  t = t.replace(/,(?=\d{3}(\D|$))/g, '').replace(/,(?=\d{1,2}$)/, '.');
+  if (!/^\d+(\.\d+)?$/.test(t)) return null;
+  return t;
+}
+function titleCase(s) { return s.toLowerCase().replace(/\b([a-z])/g, c => c.toUpperCase()); }
+function cleanName(s) {
+  s = s.replace(/^[\s\-–—*•·>○◦□☐✓✔☑︎_~=+.,:;|'"`()\[\]]+/, '').replace(/[\s\-–—*•·_~=+.,:;|'"`(\[]+$/, '');
+  s = s.replace(/^\(?\d{1,2}[.)]\s*/, '');           // "1. Milk", "2) Eggs"
+  s = s.replace(/\s{2,}/g, ' ').trim();
+  s = s.replace(/^([^A-Za-z]{1,2}\s)+/, '').replace(/(\s[^A-Za-z0-9]{1,2})+$/, '').trim(); // stray OCR specks
+  const letters = (s.match(/[A-Za-z]/g) || []).length;
+  if (letters >= 3 && s === s.toUpperCase()) s = titleCase(s);
+  return s;
+}
+function extractSize(name) {
+  const m = name.match(SIZE_RE);
+  if (!m) return { name, size: null };
+  const n = parseFloat(m[1]), u = UNIT_WORDS[m[2].toLowerCase()];
+  const rest = (name.slice(0, m.index) + ' ' + name.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').replace(/[\s\-–,(]+$/, '').replace(/^[\s\-–,)]+/, '').trim();
+  return { name: rest, size: { n, u, text: (n === 1 && !['g', 'ml'].includes(u)) ? u : (n + ' ' + u) } };
+}
+const approx = (a, b) => Math.abs(a - b) <= Math.max(1, 0.02 * Math.abs(b));
+const r2 = n => Math.round(n * 100) / 100;
+/* Decide qty / unit price / amount from the numbers at the end of a receipt line. */
+function interpretNums(nums) {
+  const v = nums.map(Number);
+  if (v.length >= 3) {
+    const last = v.slice(-4);
+    const amt = last[last.length - 1];
+    for (let i = 0; i < last.length - 1; i++) for (let j = 0; j < last.length - 1; j++) {
+      if (i === j) continue;
+      if (approx(last[i] * last[j], amt) && last[i] <= last[j]) return { qty: last[i], price: last[j], amount: amt };
+    }
+    return { qty: 1, price: amt, amount: amt };
+  }
+  if (v.length === 2) {
+    const [a, b] = v;
+    if (approx(a, b)) return { qty: 1, price: b, amount: b };
+    const ratio = b / a;
+    if (a > 0 && ratio >= 1.5 && ratio <= 50 && Math.abs(ratio - Math.round(ratio)) < 0.02 && a >= 5) return { qty: Math.round(ratio), price: a, amount: b };
+    if (a > 0 && a <= 20 && b > a) return { qty: a, price: r2(b / a), amount: b };
+    return { qty: 1, price: b, amount: b };
+  }
+  return { qty: 1, price: v[0], amount: v[0] };
+}
+function splitLine(line) {
+  // returns { name, nums[] } where nums are the trailing numeric tokens (x / @ / * separators ignored)
+  const toks = line.replace(/(\d)\s*[xX×*@]\s*(\d)/g, '$1 $2').split(/\s+/).filter(Boolean);
+  const nums = [];
+  while (toks.length) {
+    const tk = toks[toks.length - 1];
+    if (/^([xX×*@=:]|rs\.?|₹|inr|%)$/i.test(tk)) { toks.pop(); continue; }
+    const n = fixNumToken(tk);
+    if (n == null) { if (tk.length === 1 && nums.length) { toks.pop(); continue; } break; }
+    nums.unshift(n); toks.pop();
+  }
+  return { name: toks.join(' '), nums };
+}
+function isJunkLine(l) {
+  const digits = (l.match(/\d/g) || []).length, letters = (l.match(/[A-Za-z]/g) || []).length;
+  if (letters < 2) return true;
+  if (/(\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}\b/.test(l) || /\b\d{3,5}[\s-]\d{6,8}\b/.test(l)) return true;       // phone numbers
+  if (/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/.test(l) || /\b\d{1,2}:\d{2}(:\d{2})?\s*(am|pm)?\b/i.test(l)) return true; // dates / times
+  if (/\b\d{2}[A-Z]{5}\d{4}[A-Z]\d[A-Z\d]{2}\b/i.test(l)) return true;    // GSTIN
+  if (/@|\.com\b|\.in\b/i.test(l)) return true;
+  const hasPrice = /\d[.,]\d{2}\b/.test(l);
+  if (digits >= 8 && letters < digits && !hasPrice) return true;
+  if (/\b[1-9]\d{5}\b/.test(l) && !hasPrice) return true;                 // PIN code
+  return false;
+}
+/* Parse OCR text into candidate grocery lines. Exported for tests. */
+function parseOcrText(text) {
+  const lines = String(text || '').replace(/\r/g, '').split('\n').map(l => l.replace(/[“”"]/g, '').replace(/\t/g, '  ').trim()).filter(l => l.length > 1);
+  const priced = lines.filter(l => !SKIP_RE.test(l) && /\d+[.,]\d{2}\s*$/.test(l)).length;
+  const mode = (priced >= 2 || (priced >= 1 && priced >= lines.length * 0.3)) ? 'receipt' : 'list';
+  const items = [];
+  let started = false, pendingName = null;
+  for (const raw of lines) {
+    let l = raw;
+    if (mode === 'receipt') {
+      if (/\b(sub\s*-?\s*total|grand\s*total|net\s*(amt|amount|payable)|total\s*(amount|amt|qty|items)?\s*[:₹]|^total\b)/i.test(l) && started) break; // footer starts
+      if (SKIP_RE.test(l) || isJunkLine(l.replace(/^[\d.\s]+$/, ''))) {
+        // a numbers-only line can complete a pending two-line item
+        if (pendingName && /^[\d.,\s₹xX@*rsRS]+$/.test(l)) {
+          const sp = splitLine(l);
+          if (sp.nums.length) { items.push(mkItem(pendingName, interpretNums(sp.nums), mode)); started = true; }
+        }
+        pendingName = null; continue;
+      }
+      const sp = splitLine(l);
+      if (!sp.nums.length) { pendingName = sp.name; continue; }
+      if ((sp.name.match(/[A-Za-z]/g) || []).length < 2) {
+        if (pendingName) { items.push(mkItem(pendingName, interpretNums(sp.nums), mode)); started = true; pendingName = null; }
+        continue;
+      }
+      if (!started && !sp.nums.some(n => /\.\d{2}$/.test(n))) { pendingName = null; continue; }
+      // drop a leading serial number "1 Toor Dal ..."
+      sp.name = sp.name.replace(/^\d{1,3}[.)]?\s+(?=[A-Za-z])/, '');
+      items.push(mkItem(sp.name, interpretNums(sp.nums), mode)); started = true; pendingName = null;
+    } else {
+      if (LIST_HEADER_RE.test(l) || isJunkLine(l)) continue;
+      if (SKIP_RE.test(l) && !/^[-*•·\d.)\s]*[A-Za-z]/.test(l.replace(SKIP_RE, ''))) continue;
+      l = l.replace(/^\s*[-–—*•·>○◦□☐✓✔]+\s*/, '').replace(/^\(?\d{1,2}[.)]\s+/, '');
+      l = l.replace(new RegExp('(^|\\s)([SsOoIl|])\\s*(?=(' + UNIT_RE_SRC + ')\\b)', 'g'), (m0, a, c) => a + ({ S: '5', s: '5', O: '0', o: '0', I: '1', l: '1', '|': '1' })[c] + ' ');
+      let qty = 1, unit = '';
+      let m = l.match(new RegExp('^(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')?\\b\\.?\\s+(?=[A-Za-z])', 'i'));  // "2 kg onions", "3 eggs"
+      if (m) { qty = parseFloat(m[1]); unit = m[2] ? UNIT_WORDS[m[2].toLowerCase()] : ''; l = l.slice(m[0].length); }
+      else {
+        m = l.match(new RegExp('[\\s\\-–:,(]+[xX×]?\\s*(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')?\\.?\\)?\\s*$', 'i')); // "Milk - 3 L", "Eggs x2"
+        if (m) { qty = parseFloat(m[1]); unit = m[2] ? UNIT_WORDS[m[2].toLowerCase()] : ''; l = l.slice(0, m.index); }
+        else { m = l.match(new RegExp('\\s(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')\\.?\\s', 'i')); if (m) { qty = parseFloat(m[1]); unit = UNIT_WORDS[m[2].toLowerCase()]; l = (l.slice(0, m.index) + ' ' + l.slice(m.index + m[0].length)).trim(); } }
+      }
+      const name = cleanName(l);
+      if ((name.match(/[A-Za-z]/g) || []).length < 2 || name.length > 40) continue;
+      items.push({ name, qty: qty > 0 && qty < 1000 ? qty : 1, unit, price: 0, amount: 0 });
+    }
+  }
+  // tidy + de-duplicate by normalized name
+  const out = [];
+  items.forEach(it => {
+    if (!it || !it.name || (it.name.match(/[A-Za-z]/g) || []).length < 2) return;
+    const k = normName(it.name);
+    if (!k) return;
+    const prev = out.find(o => normName(o.name) === k && (o.unit || '') === (it.unit || ''));
+    if (prev) { const tot = prev.qty * prev.price + it.qty * it.price; prev.qty = r2(prev.qty + it.qty); prev.price = prev.qty ? r2(tot / prev.qty) : prev.price; prev.amount = r2(prev.amount + it.amount); }
+    else out.push(it);
+  });
+  return { mode, items: out, lines: lines.length };
+}
+function mkItem(rawName, nums, mode) {
+  let name = cleanName(rawName.replace(/\s+\d+(\.\d+)?\s*$/, ''));
+  const sz = extractSize(name);
+  name = cleanName(sz.name) || name;
+  return { name, qty: nums.qty, unit: sz.size ? sz.size.text : '', price: r2(nums.price), amount: r2(nums.amount) };
+}
+
+/* ---- fuzzy name matching against the usual-items list ---- */
+function normName(s) {
+  return String(s || '').toLowerCase().replace(new RegExp(SIZE_RE.source, 'gi'), ' ').replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean)
+    .map(w => SYNONYMS[w] || w).map(w => w.length > 4 && /(oes|ies)$/.test(w) ? w.replace(/(oes)$/, 'o').replace(/ies$/, 'y') : (w.length > 3 && /[^s]s$/.test(w) ? w.slice(0, -1) : w))
+    .map(w => SYNONYMS[w] || w).filter(w => !STOP.has(w)).join(' ').trim();
+}
+function lev(a, b) {
+  const m = a.length, n = b.length; if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+function nameSimilarity(a, b) {
+  const x = normName(a), y = normName(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  const tx = x.split(' '), ty = y.split(' ');
+  const [sh, lo] = tx.length <= ty.length ? [tx, ty] : [ty, tx];
+  // the head noun is usually the last word: "Tata Salt" ≈ "Salt", but "Rice flour" ≠ "Rice"
+  const headSame = (f => f(sh[sh.length - 1], lo[lo.length - 1]));
+  if (sh.every(w => lo.includes(w)) && sh.join('').length >= 3) return headSame((a, b) => a === b) ? 0.9 : 0.6;   // "toor dal" ⊂ "tata toor dal"
+  const tokOk = (w, v) => w === v || (Math.min(w.length, v.length) >= 2 && Math.max(w.length, v.length) >= 3 && (v.startsWith(w) || w.startsWith(v))) || (Math.min(w.length, v.length) >= 4 && lev(w, v) <= 1);
+  if (sh.length && sh.every(w => lo.some(v => tokOk(w, v))) && headSame(tokOk) && sh.join('').length >= 4) return 0.85; // truncated receipt names, small typos
+  const ratio = 1 - lev(x, y) / Math.max(x.length, y.length);
+  if (Math.min(x.length, y.length) <= 3) return ratio === 1 ? 1 : 0;
+  return ratio;
+}
+function matchMaster(name) {
+  let best = null, score = 0;
+  G().master.forEach(m => { const s = nameSimilarity(name, m.name); if (s > score) { score = s; best = m; } });
+  return score >= 0.75 ? best : null;
+}
+
+/* ---- OCR engine loading & image prep ---- */
+let ocrWorker = null, ocrCancelled = false;
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.async = true; s.onload = res; s.onerror = () => { s.remove(); rej(new Error('Could not load ' + src)); }; document.head.appendChild(s); });
+}
+function simdSupported() {
+  try { return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11])); } catch (e) { return false; }
+}
+let ocrFromCdn = false;
+async function getTesseract() {
+  if (window.Tesseract) return window.Tesseract;
+  try { await loadScript(OCR_BASE + 'tesseract.min.js'); }
+  catch (e) { await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js'); ocrFromCdn = true; }
+  if (!window.Tesseract) throw new Error('OCR engine unavailable');
+  return window.Tesseract;
+}
+function prepImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const w0 = img.naturalWidth, h0 = img.naturalHeight, long = Math.max(w0, h0);
+      const scale = long > 2400 ? 2400 / long : (long < 1200 ? Math.min(2.5, 1200 / long) : 1);
+      const c = document.createElement('canvas');
+      c.width = Math.round(w0 * scale); c.height = Math.round(h0 * scale);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      // grayscale + gentle contrast stretch helps with phone photos
+      const d = ctx.getImageData(0, 0, c.width, c.height), p = d.data;
+      let lo = 255, hi = 0; const g = new Uint8ClampedArray(p.length / 4);
+      for (let i = 0, j = 0; i < p.length; i += 4, j++) { const v = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; g[j] = v; }
+      const hist = new Uint32Array(256); g.forEach(v => hist[v]++);
+      let acc = 0; const n = g.length;
+      for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > n * 0.01) { lo = v; break; } }
+      acc = 0; for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > n * 0.01) { hi = v; break; } }
+      const span = Math.max(40, hi - lo);
+      for (let i = 0, j = 0; i < p.length; i += 4, j++) { const v = Math.max(0, Math.min(255, (g[j] - lo) * 255 / span)); p[i] = p[i + 1] = p[i + 2] = v; }
+      ctx.putImageData(d, 0, 0);
+      URL.revokeObjectURL(url); resolve(c);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file could not be opened as an image')); };
+    img.src = url;
+  });
+}
+const OCR_STATUS = { 'loading tesseract core': 'Loading the text reader…', 'initializing tesseract': 'Starting up…', 'initialized tesseract': 'Starting up…', 'loading language traineddata': 'Loading English model (first time only)…',
+  'loading language traineddata (from cache)': 'Loading English model…', 'initializing api': 'Getting ready…', 'initialized api': 'Getting ready…', 'recognizing text': 'Reading your photo…' };
+function ocrProgressSheet() {
+  $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Reading photo" data-testid="ocr-progress"><div class="grab"></div><h3>📷 Reading your photo</h3>' +
+    '<div class="small muted" id="ocrStatus">Preparing image…</div><div class="progress" style="margin:14px 0 6px"><i id="ocrBar" style="width:2%"></i></div><div class="tiny muted" id="ocrPct">0%</div>' +
+    '<div class="tiny muted" style="margin-top:10px">Everything happens on your phone — the photo is not uploaded.</div>' +
+    '<div class="actions"><button class="btn block" type="button" id="ocrCancel">Cancel</button></div></div></div>';
+  $('#ocrCancel').onclick = () => { ocrCancelled = true; if (ocrWorker) { ocrWorker.terminate().catch(() => {}); ocrWorker = null; } closeSheet(); toast('Cancelled'); };
+}
+function ocrProgress(m) {
+  const st = document.getElementById('ocrStatus'); if (!st) return;
+  const label = OCR_STATUS[m.status] || (m.status ? m.status.charAt(0).toUpperCase() + m.status.slice(1) + '…' : '');
+  st.textContent = label;
+  // weight: setup steps 0–30%, recognition 30–100%
+  const p = m.status === 'recognizing text' ? 30 + (m.progress || 0) * 70 : Math.min(30, 5 + (m.progress || 0) * 25);
+  document.getElementById('ocrBar').style.width = p.toFixed(0) + '%';
+  document.getElementById('ocrPct').textContent = p.toFixed(0) + '%';
+}
+async function ocrRecognize(canvas) {
+  const T = await getTesseract();
+  const abs = p => new URL(p, location.href).href;
+  const opts = { logger: m => { if (!ocrCancelled) ocrProgress(m); }, errorHandler: () => {} };
+  if (!ocrFromCdn) Object.assign(opts, { workerBlobURL: false, workerPath: abs(OCR_BASE + 'worker.min.js'), corePath: abs(OCR_BASE + 'core/' + (simdSupported() ? 'tesseract-core-simd-lstm.wasm.js' : 'tesseract-core-lstm.wasm.js')), langPath: abs(OCR_BASE + 'lang'), gzip: true });
+  ocrWorker = await T.createWorker('eng', 1, opts);
+  try {
+    await ocrWorker.setParameters({ tessedit_pageseg_mode: String(window.__OCR_PSM || '6'), preserve_interword_spaces: '1' });
+    const res = await ocrWorker.recognize(canvas);
+    if (!ocrFromCdn && window.caches) {   // keep the OCR engine available offline
+      const core = OCR_BASE + 'core/' + (simdSupported() ? 'tesseract-core-simd-lstm.wasm.js' : 'tesseract-core-lstm.wasm.js');
+      caches.open('tracker-ocr-v1').then(c => Promise.all([OCR_BASE + 'tesseract.min.js', OCR_BASE + 'worker.min.js', core, OCR_BASE + 'lang/eng.traineddata.gz']
+        .map(u => c.match(abs(u)).then(hit => hit || c.add(abs(u)))))).catch(() => {});
+    }
+    return res.data.text || '';
+  } finally { if (ocrWorker) { ocrWorker.terminate().catch(() => {}); ocrWorker = null; } }
+}
+async function handlePhoto(file) {
+  if (!file) return;
+  if (!/^https?:$/.test(location.protocol) && !window.Tesseract) { /* file:// fallback: try anyway, CDN may work */ }
+  ocrCancelled = false;
+  ocrProgressSheet();
+  let text = '';
+  try {
+    const canvas = await prepImage(file);
+    if (ocrCancelled) return;
+    text = await ocrRecognize(canvas);
+  } catch (e) {
+    if (ocrCancelled) return;
+    closeSheet();
+    formSheet({ title: 'Couldn’t read the photo', message: esc((e && e.message) || String(e)) + '<br><br>Photo import needs the app opened from its web address (it downloads a ~10 MB text reader once, then works offline).', ok: 'OK', fields: [] });
+    return;
+  }
+  if (ocrCancelled) return;
+  window.__lastOcrText = text;
+  const parsed = parseOcrText(text);
+  if (!parsed.items.length) return ocrNothingFound(text);
+  openOcrReview(parsed, text);
+}
+function ocrNothingFound(text) {
+  const has = text.replace(/\s/g, '').length > 0;
+  $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="No items found" data-testid="ocr-empty"><div class="grab"></div><h3>🤔 No items found</h3>' +
+    '<p class="small">' + (has ? 'I could read some text, but nothing that looks like grocery items.' : 'I couldn’t read any text in that photo.') + '</p>' +
+    '<div class="note">Tips: use good light, hold the phone straight above the paper, fill the frame with the list, and avoid shadows. Printed bills work best; neat block letters work for handwriting.</div>' +
+    (has ? '<details><summary class="small muted">Show what was read</summary><pre class="ocr-raw">' + esc(text.trim()) + '</pre></details>' : '') +
+    '<div class="actions"><button class="btn" type="button" data-x="close">Close</button><button class="btn primary" type="button" data-x="again">Try another photo</button></div></div></div>';
+  const bg = $('#sheetRoot .sheet-bg');
+  bg.addEventListener('click', e => {
+    if (e.target === bg || e.target.closest('[data-x=close]')) closeSheet();
+    else if (e.target.closest('[data-x=again]')) { closeSheet(); photoMenu(); }
+  });
+}
+
+/* ---- review screen ---- */
+let review = null;
+function openOcrReview(parsed, text) {
+  const mk = ui.gMonth && G().months[ui.gMonth] ? ui.gMonth : curMonthKey();
+  review = { mk, mode: parsed.mode, asBought: parsed.mode === 'receipt', addMaster: true, text, store: G().lastStore && storeById(G().lastStore) ? G().lastStore : '',
+    items: parsed.items.map(it => ({ on: true, name: it.name, qty: it.qty || 1, unit: it.unit || '', price: it.price || 0 })) };
+  renderReview();
+}
+function reviewMatchLabel(it) {
+  if (!it.name.trim()) return '';
+  const m = matchMaster(it.name);
+  return m ? '<span class="match">↔ ' + esc(m.name) + '</span>' : '<span class="newtag">new item</span>';
+}
+function reviewTotals() {
+  const on = review.items.filter(i => i.on && i.name.trim());
+  return { n: on.length, total: on.reduce((s, i) => s + num(i.qty) * num(i.price), 0) };
+}
+function renderReview() {
+  const R = review, tt = reviewTotals();
+  const rows = R.items.map((it, i) =>
+    '<div class="rv-row ' + (it.on ? '' : 'off') + '" data-testid="rv-row">' +
+      '<button type="button" class="check ' + (it.on ? 'on' : '') + '" data-rv="toggle" data-i="' + i + '" aria-label="Include ' + esc(it.name) + '" aria-pressed="' + it.on + '"><i>✓</i></button>' +
+      '<div class="grow"><input class="rv-name" data-rv-in="name" data-i="' + i + '" value="' + esc(it.name) + '" aria-label="Item name" placeholder="Item name">' +
+        '<div class="rv-sub"><label>Qty <input class="rv-num" data-rv-in="qty" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.qty) + '" aria-label="Quantity"></label>' +
+        '<label>₹ <input class="rv-num price" data-rv-in="price" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.price || '') + '" placeholder="price" aria-label="Unit price"></label>' +
+        (it.unit ? '<span class="tiny muted">' + esc(it.unit) + '</span>' : '') + '</div>' +
+        '<div class="tiny" id="rvm' + i + '">' + reviewMatchLabel(it) + '</div></div>' +
+      '<button type="button" class="icon-btn ghost sm" data-rv="del" data-i="' + i + '" aria-label="Delete line">✕</button></div>').join('');
+  $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet tall" role="dialog" aria-label="Review items" data-testid="ocr-review"><div class="grab"></div>' +
+    '<h3>Review items <span class="muted small">(' + R.items.length + ' found)</span></h3>' +
+    '<div class="small muted">Looks like a ' + (R.mode === 'receipt' ? '<b>bill / receipt</b>' : '<b>shopping list</b>') + '. Fix anything that was misread, untick what you don’t want.</div>' +
+    '<div class="rv-list">' + (rows || '<div class="empty small">No lines.</div>') + '</div>' +
+    '<button type="button" class="btn sm" data-rv="addline" style="margin:6px 0">＋ Add a line</button>' +
+    '<div class="card" style="margin:10px 0 0;padding:12px"><div class="small bold" style="margin-bottom:6px">Add to ' + monthName(R.mk) + ' as</div>' +
+      '<div class="seg" style="margin:0"><button type="button" data-rv="want" class="' + (R.asBought ? '' : 'on') + '">🛒 To buy</button><button type="button" data-rv="bought" class="' + (R.asBought ? 'on' : '') + '">✓ Bought (with prices)</button></div>' +
+      '<label class="rv-store small bold">Store <select class="field" data-rv-in="store" aria-label="Store">' + storeOptions(R.store) + '</select></label>' +
+      '<label class="rv-opt"><input type="checkbox" data-rv-in="addMaster" ' + (R.addMaster ? 'checked' : '') + '> Also add new ones to my usual items</label>' +
+      '<div class="tiny muted">Items that match your usual list (↔) are merged, never duplicated.</div></div>' +
+    '<details style="margin-top:10px"><summary class="small muted">Show recognised text</summary><pre class="ocr-raw" data-testid="ocr-raw">' + esc(R.text.trim()) + '</pre></details>' +
+    '<div class="actions"><button type="button" class="btn" data-rv="cancel">Cancel</button><button type="button" class="btn primary" data-rv="apply" data-testid="rv-apply" ' + (tt.n ? '' : 'disabled') + '>Add ' + plural(tt.n, 'item') +
+      (R.asBought && tt.total ? ' · ' + money(tt.total) : '') + '</button></div></div></div>';
+  const sheet = $('#sheetRoot .sheet');
+  sheet.addEventListener('click', onReviewClick);
+  sheet.addEventListener('input', onReviewInput);
+  sheet.addEventListener('change', e => { const el = e.target; if (el.dataset.rvIn === 'name') { const m = document.getElementById('rvm' + el.dataset.i); if (m) m.innerHTML = reviewMatchLabel(review.items[+el.dataset.i]); } });
+}
+function updateApplyBtn() {
+  const b = document.querySelector('[data-rv=apply]'); if (!b) return;
+  const tt = reviewTotals(); b.disabled = !tt.n;
+  b.textContent = 'Add ' + plural(tt.n, 'item') + (review.asBought && tt.total ? ' · ' + money(tt.total) : '');
+}
+function onReviewInput(e) {
+  const el = e.target, k = el.dataset.rvIn; if (!k) return;
+  if (k === 'addMaster') { review.addMaster = el.checked; return; }
+  if (k === 'store') { review.store = el.value; return; }
+  const it = review.items[+el.dataset.i];
+  it[k] = k === 'name' ? el.value : num(el.value);
+  updateApplyBtn();
+}
+function onReviewClick(e) {
+  const b = e.target.closest('[data-rv]'); if (!b) return;
+  const a = b.dataset.rv, i = +b.dataset.i;
+  if (a === 'toggle') { review.items[i].on = !review.items[i].on; renderReview(); }
+  else if (a === 'del') { review.items.splice(i, 1); renderReview(); }
+  else if (a === 'addline') { review.items.push({ on: true, name: '', qty: 1, unit: '', price: 0 }); renderReview(); const ins = document.querySelectorAll('.rv-name'); if (ins.length) ins[ins.length - 1].focus(); }
+  else if (a === 'want' || a === 'bought') { review.asBought = a === 'bought'; renderReview(); }
+  else if (a === 'cancel') { review = null; closeSheet(); }
+  else if (a === 'apply') applyReview();
+}
+function applyReview() {
+  const R = review; if (!R) return;
+  ensureMonth(R.mk);
+  const mo = G().months[R.mk];
+  let added = 0, merged = 0, newMaster = 0;
+  R.items.filter(i => i.on && i.name.trim()).forEach(it => {
+    const name = it.name.trim(), qty = num(it.qty) > 0 ? num(it.qty) : 1, price = num(it.price);
+    let m = matchMaster(name);
+    if (!m && R.addMaster) {
+      m = { id: uid(), name, unit: it.unit || '', price: price, cat: '' };
+      G().master.push(m); newMaster++;
+      Object.keys(G().months).forEach(k => { if (k >= curMonthKey() && k !== R.mk) G().months[k].items.push(monthItem(m, k)); });
+    } else if (m) {
+      if (!num(m.price) && price) m.price = price;
+      if (!m.unit && it.unit) m.unit = it.unit;
+    }
+    let row = m ? mo.items.find(x => x.mid === m.id) : mo.items.find(x => !x.mid && nameSimilarity(x.name, name) >= 0.9);
+    if (!row) {
+      row = m ? monthItem(m, R.mk) : { mid: null, name, unit: it.unit || '', cat: '', want: false, bought: false, qty: 1, price: price };
+      row.qty = 0; mo.items.push(row); added++;
+    } else merged++;
+    if (R.asBought) {
+      const wasBought = row.bought;
+      const oldTot = wasBought ? num(row.qty) * num(row.price) : 0, oldQty = wasBought ? num(row.qty) : 0;
+      const p = price || num(row.price);
+      row.qty = r2(oldQty + qty);
+      row.price = row.qty ? r2((oldTot + qty * p) / row.qty) : p;
+      row.bought = true; row.want = true; row.boughtOn = boughtDate(R.mk);
+      if (R.store) row.store = R.store;
+    } else {
+      const wasActive = row.want || row.bought;
+      row.want = true;
+      if (!wasActive || !num(row.qty)) row.qty = qty;
+      if (price && !row.bought) { row.price = price; if (R.store) row.store = R.store; }
+      if (price && R.store) G().prices.push({ id: uid(), mid: m ? m.id : name, store: R.store, price, date: todayKey() });
+    }
+  });
+  if (R.store) G().lastStore = R.store;
+  save();
+  review = null; closeSheet();
+  ui.tab = 'grocery'; ui.gMode = 'month'; ui.gMonth = R.mk; ui.gFilter = R.asBought ? 'bought' : 'tobuy';
+  render();
+  toast('Added ' + plural(added + merged, 'item') + (newMaster ? ' · ' + newMaster + ' new in usual items' : ''));
+}
+async function photoMenu() {
+  const v = await menuSheet('Add from photo', [{ label: 'Take a photo', value: 'cam', icon: '📷' }, { label: 'Choose from gallery', value: 'gal', icon: '🖼️' }]);
+  if (v === 'cam') $('#photoCam').click(); else if (v === 'gal') $('#photoPick').click();
 }
 
 /* =====================================================================
@@ -667,13 +1311,14 @@ function viewSettings() {
     '<div class="fab-row" style="flex-wrap:wrap"><button class="btn primary grow" data-act="export">⬇ Export JSON</button><button class="btn grow" data-act="importPick">⬆ Import JSON</button></div>' +
     (navigator.canShare ? '<button class="btn block" data-act="shareBackup">📤 Share backup file…</button>' : '') +
     '<input type="file" id="importFile" accept="application/json,.json" hidden></div>';
+  h += '<h2>Stores</h2><div class="card"><div class="small muted">' + esc(S.stores.map(x => x.name).join(' · ') || 'No stores') + '</div><div class="fab-row" style="margin-bottom:0"><button class="btn block" data-act="stores" data-testid="settings-stores">🏪 Manage stores</button></div></div>';
   h += '<h2>Install on your phone</h2><div class="card small">' + (standalone ? '✅ Running as an installed app.' :
     (deferredInstall ? '<button class="btn primary block" data-act="install">📲 Install app</button>' : '') +
     '<div style="margin-top:6px"><b>iPhone (Safari):</b> tap Share → <i>Add to Home Screen</i>.</div><div style="margin-top:6px"><b>Android (Chrome):</b> menu ⋮ → <i>Add to Home screen</i> / <i>Install app</i>.</div>') +
     '<div class="muted" style="margin-top:8px">Works offline once opened.</div></div>';
   h += '<h2>Summary</h2><div class="card"><div class="kv"><span>Checklists</span><span>' + S.checklists.length + '</span><span>Avoid habits</span><span>' + S.avoid.items.length + '</span>' +
     '<span>Grocery items</span><span>' + G().master.length + '</span><span>Grocery months</span><span>' + Object.keys(G().months).length + '</span><span>Goals</span><span>' + S.goals.length + '</span>' +
-    '<span>Today</span><span>' + fmtD(todayKey(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + '</span></div></div>';
+    '<span>Today</span><span>' + fmtDLong(todayKey()) + '</span></div></div>';
   h += '<h2>Danger zone</h2><div class="card"><button class="btn danger block" data-act="wipe">Erase all data on this device</button></div>';
   h += '<div class="tiny muted center" style="margin:16px 0">Tracker v' + APP_VERSION + ' · ₹ INR · en-IN</div>';
   return h;
@@ -763,7 +1408,15 @@ const A = {
   gGoMonth: d => { ui.gMode = 'month'; ui.gMonth = d.mk; ui.gFilter = null; render(); window.scrollTo(0, 0); },
   gYearNav: d => { ui.gYear += +d.dir; render(); },
   gWant: d => { const it = G().months[ui.gMonth].items[+d.i]; it.want = !it.want; if (!it.want) it.bought = false; save(); render(); },
-  gBought: d => { const it = G().months[ui.gMonth].items[+d.i]; it.bought = !it.bought; if (it.bought) it.want = true; save(); render(); },
+  gBought: d => {
+    const it = G().months[ui.gMonth].items[+d.i]; it.bought = !it.bought;
+    if (it.bought) { it.want = true; it.boughtOn = boughtDate(ui.gMonth); if (!it.store && G().lastStore && storeById(G().lastStore)) it.store = G().lastStore; }
+    save(); render();
+  },
+  gItem: d => { const it = G().months[ui.gMonth].items[+d.i]; if (it) itemSheet(it.mid || it.name); },
+  gItemKey: d => itemSheet(d.key),
+  gCompare: d => { const it = G().months[ui.gMonth].items[+d.i]; if (it) compareSheet(it.name); },
+  stores: () => storesSheet(),
   gCopyPlan: () => {
     const keys = Object.keys(G().months).sort(), prev = G().months[keys[keys.indexOf(ui.gMonth) - 1]]; if (!prev) return;
     const mo = G().months[ui.gMonth]; let n = 0;
@@ -772,6 +1425,7 @@ const A = {
   },
   gAddMaster: () => gAddMaster(), gEditMaster: d => gEditMaster(d.id), gDelMaster: d => gDelMaster(d.id),
   gHist: d => showHistory(d.key),
+  photo: () => photoMenu(),
   newGoal: () => newGoal(),
   openGoal: d => { ui.goalId = d.id; render(); window.scrollTo(0, 0); },
   closeGoal: () => { ui.goalId = null; render(); },
@@ -806,7 +1460,8 @@ const F = {
 };
 const C = {
   gQty: (d, el) => { const it = G().months[ui.gMonth].items[+d.i]; it.qty = num(el.value); save(); updateGTotals(+d.i); },
-  gPrice: (d, el) => { const it = G().months[ui.gMonth].items[+d.i]; it.price = num(el.value); save(); updateGTotals(+d.i); }
+  gPrice: (d, el) => { const it = G().months[ui.gMonth].items[+d.i]; it.price = num(el.value); save(); updateGTotals(+d.i); },
+  gStore: (d, el) => { const it = G().months[ui.gMonth].items[+d.i]; it.store = el.value; if (el.value) G().lastStore = el.value; save(); }
 };
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
@@ -820,6 +1475,11 @@ document.addEventListener('submit', e => {
 });
 document.addEventListener('input', e => { const el = e.target.closest('[data-chg]'); if (el && C[el.dataset.chg]) C[el.dataset.chg](el.dataset, el); });
 document.addEventListener('change', e => {
+  if (e.target.id === 'photoCam' || e.target.id === 'photoPick') {
+    const file = e.target.files && e.target.files[0]; e.target.value = '';
+    if (file) handlePhoto(file);
+    return;
+  }
   if (e.target.id === 'importFile') {
     const file = e.target.files[0]; if (!file) return;
     const r = new FileReader(); r.onload = () => importText(String(r.result)); r.readAsText(file); e.target.value = '';
@@ -878,6 +1538,6 @@ function init() {
   }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 }
-window.Tracker = { get state() { return S; }, checkRollover, render, ensureMonth, goalStats, avoidStats, yearData, STORE_KEY, importText };
+window.Tracker = { get state() { return S; }, checkRollover, render, ensureMonth, goalStats, avoidStats, yearData, STORE_KEY, importText, parseOcrText, matchMaster, nameSimilarity, normName, handlePhoto };
 init();
 })();
