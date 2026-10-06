@@ -9,8 +9,9 @@ A mobile-first personal tracker you can install on your phone (PWA). It works of
 - **Grocery**
   - Master item list, plus a fresh list every month with the last price prefilled.
   - Month totals in ₹, and a yearly view with price history.
+  - Quantity is **pack size × count** (e.g. *Toor dal — 200 g × 3*). Price is per pack, and the app shows the total weight and ₹/kg (or ₹/L, ₹/pc) so different pack sizes compare fairly.
   - **📷 Add from photo**: snap a handwritten/typed list or a shop bill. Text is read on the phone, then you review and add the items.
-  - **Price by store** (Mall, BigBasket, Blinkit, Zepto, JioMart, Amazon Fresh, Local kirana, or your own): shows the cheapest store per item, how much you'd save versus where you last bought, and a *Best store* summary in the Year view.
+  - **Price by store** (Mall, BigBasket, Blinkit, Zepto, JioMart, Amazon Fresh, Local kirana, or add your own with “＋ New store…” right in the picker): shows the cheapest store per item, how much you'd save versus where you last bought, and a *Best store* summary in the Year view.
   - **Compare**: one tap opens the item's search on BigBasket, Blinkit, Zepto, JioMart and Amazon Fresh.
 - **Goals**: counted goals like "96 Fridays", with progress, remaining count and estimated finish. They can start on a future date.
 - **Settings**: Export / Import a JSON backup

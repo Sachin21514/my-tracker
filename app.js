@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 const STORE_KEY = 'sachin-tracker-v1';
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const $ = s => document.querySelector(s);
 
 /* ---------- date helpers (device local time) ---------- */
@@ -30,13 +30,13 @@ const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
 /* ---------- state ---------- */
 let S;
 function blank() {
-  return { version: 1, checklists: [], avoid: { items: [], log: {} }, grocery: { master: [], months: {}, prices: [], lastStore: '' }, stores: defaultStores(), goals: [], meta: { created: now().toISOString() } };
+  return { version: 2, checklists: [], avoid: { items: [], log: {} }, grocery: { master: [], months: {}, prices: [], lastStore: '' }, stores: defaultStores(), goals: [], meta: { created: now().toISOString() } };
 }
 function normalize(d) {
   const b = blank();
   if (!d || typeof d !== 'object') return b;
   const o = {
-    version: 1,
+    version: 2,
     checklists: Array.isArray(d.checklists) ? d.checklists : [],
     avoid: { items: (d.avoid && Array.isArray(d.avoid.items)) ? d.avoid.items : [], log: (d.avoid && d.avoid.log && typeof d.avoid.log === 'object') ? d.avoid.log : {} },
     grocery: { master: (d.grocery && Array.isArray(d.grocery.master)) ? d.grocery.master : [], months: (d.grocery && d.grocery.months && typeof d.grocery.months === 'object') ? d.grocery.months : {} },
@@ -49,6 +49,11 @@ function normalize(d) {
   o.checklists.forEach(c => { c.items = Array.isArray(c.items) ? c.items : []; });
   o.goals.forEach(g => { g.dates = Array.isArray(g.dates) ? g.dates : []; g.prior = +g.prior || 0; g.target = Math.max(1, +g.target || 1); });
   Object.values(o.grocery.months).forEach(m => { m.items = Array.isArray(m.items) ? m.items : []; });
+  // v1 → v2: quantity becomes pack size + unit × count (old qty → count, old unit → pack size/unit)
+  o.grocery.master.forEach(m => migratePack(m, true));
+  Object.values(o.grocery.months).forEach(m => m.items.forEach(it => migratePack(it, false)));
+  o.grocery.prices.forEach(p => { if (!UNIT_BASE[p.sizeUnit]) { const m = o.grocery.master.find(x => x.id === p.mid); const pk = packOf(m || {}); p.size = pk.size; p.sizeUnit = pk.unit; } });
+  o.version = 2;
   return o;
 }
 function load() {
@@ -102,16 +107,25 @@ function formSheet(opts) {
           (x.placeholder ? ' placeholder="' + esc(x.placeholder) + '"' : '') + (x.min != null ? ' min="' + x.min + '"' : '') + (x.max != null ? ' max="' + x.max + '"' : '') +
           (x.step ? ' step="' + x.step + '"' : '') + (x.inputmode ? ' inputmode="' + x.inputmode + '"' : '') + (x.required ? ' required' : '') + ' autocomplete="off">';
       }
-      return '<label class="lbl" for="' + id + '">' + esc(x.label) + '</label>' + inp + (x.hint ? '<div class="tiny muted" style="margin:4px 2px">' + esc(x.hint) + '</div>' : '');
-    }).join('');
+      return { row: x.row, html: '<label class="lbl" for="' + id + '">' + esc(x.label) + '</label>' + inp + (x.hint ? '<div class="tiny muted" style="margin:4px 2px">' + esc(x.hint) + '</div>' : '') };
+    }).reduce((acc, x, i, arr) => {   // consecutive fields with the same "row" sit side by side
+      if (!x.row) return acc + x.html;
+      const startsRow = i === 0 || arr[i - 1].row !== x.row, endsRow = i === arr.length - 1 || arr[i + 1].row !== x.row;
+      return acc + (startsRow ? '<div class="f-row">' : '') + '<div class="f-col">' + x.html + '</div>' + (endsRow ? '</div>' : '');
+    }, '');
     $('#sheetRoot').innerHTML = '<div class="sheet-bg"><form class="sheet" role="dialog" aria-modal="true" aria-label="' + esc(opts.title) + '"><div class="grab"></div><h3>' + esc(opts.title) + '</h3>' +
       (opts.message ? '<p class="muted" style="margin:4px 0">' + opts.message + '</p>' : '') + f +
+      (opts.preview ? '<div class="preview" data-testid="form-preview"></div>' : '') +
       '<div class="actions"><button type="button" class="btn" data-x="cancel">Cancel</button><button type="submit" class="btn ' + (opts.danger ? 'danger' : 'primary') + '" data-x="ok">' + esc(opts.ok || 'Save') + '</button></div></form></div>';
     const bg = $('#sheetRoot .sheet-bg'), form = bg.querySelector('form');
     const done = v => { closeSheet(); resolve(v); };
     bg.addEventListener('click', e => { if (e.target === bg) done(null); });
     form.querySelector('[data-x=cancel]').onclick = () => done(null);
     form.onsubmit = e => { e.preventDefault(); const v = {}; new FormData(form).forEach((val, k) => { v[k] = typeof val === 'string' ? val.trim() : val; }); done(v); };
+    if (opts.preview) {
+      const upd = () => { const v = {}; new FormData(form).forEach((val, k) => { v[k] = val; }); form.querySelector('.preview').innerHTML = opts.preview(v); };
+      form.addEventListener('input', upd); form.addEventListener('change', upd); upd();
+    }
     const first = form.querySelector('input,select');
     if (first && opts.focus !== false) setTimeout(() => { if (form.contains(document.activeElement)) return; first.focus(); if (first.select) first.select(); }, 60);
   });
@@ -302,17 +316,67 @@ async function avoidMenu(id) {
    GROCERY
    ===================================================================== */
 const G = () => S.grocery;
-const lineTotal = it => num(it.qty) * num(it.price);
-function lastPrice(mid, beforeMk) {
+/* ---- packs: size + unit per pack, and a count of packs ---- */
+const PACK_UNITS = ['g', 'kg', 'ml', 'L', 'pcs', 'dozen', 'pack'];
+const UNIT_BASE = { g: ['kg', 0.001], kg: ['kg', 1], ml: ['L', 0.001], L: ['L', 1], pcs: ['pc', 1], dozen: ['pc', 12], pack: ['pack', 1] };
+const UNIT_ALIAS = { g: 'g', gm: 'g', gms: 'g', gr: 'g', gram: 'g', grams: 'g', kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg', ml: 'ml', l: 'L', lt: 'L', ltr: 'L', ltrs: 'L', litre: 'L', litres: 'L', liter: 'L', liters: 'L',
+  pc: 'pcs', pcs: 'pcs', piece: 'pcs', pieces: 'pcs', nos: 'pcs', no: 'pcs', dozen: 'dozen', doz: 'dozen', dz: 'dozen', pack: 'pack', packs: 'pack', packet: 'pack', packets: 'pack', pkt: 'pack', pkts: 'pack' };
+const toPackUnit = u => UNIT_ALIAS[String(u || '').toLowerCase()] || (UNIT_BASE[u] ? u : null);
+/* Old free-text units ("kg", "5 kg", "400 g", "litre", "dozen", "bunch", "") → { size, unit }. */
+function parsePack(str) {
+  const s = String(str || '').trim();
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*([A-Za-z]+)\.?$/);
+  if (m) { const u = toPackUnit(m[2]); return { size: +m[1] > 0 ? +m[1] : 1, unit: u || 'pack' }; }
+  return { size: 1, unit: toPackUnit(s) || 'pack' };
+}
+const packOf = x => ({ size: num(x && x.size) > 0 ? num(x.size) : 1, unit: x && UNIT_BASE[x.sizeUnit] ? x.sizeUnit : 'pack' });
+const fmtN = n => String(+(+n).toFixed(3));
+function packText(x) {
+  const p = packOf(x);
+  if (p.unit === 'pack') return p.size === 1 ? '1 pack' : fmtN(p.size) + ' packs';
+  if (p.unit === 'pcs') return fmtN(p.size) + (p.size === 1 ? ' pc' : ' pcs');
+  return fmtN(p.size) + ' ' + p.unit;
+}
+const qtyText = x => packText(x) + ' × ' + fmtN(num(x.count));
+const baseUnit = x => UNIT_BASE[packOf(x).unit][0];
+const packBase = x => { const p = packOf(x); return p.size * UNIT_BASE[p.unit][1]; };   // one pack in kg / L / pc / pack
+const lineBase = x => packBase(x) * num(x.count);
+const normPrice = (price, x) => num(price) / packBase(x);                           // ₹ per kg / L / pc / pack
+function fmtBase(amount, bu) {
+  const a = +amount || 0;
+  if (bu === 'kg') return a < 1 ? fmtN(Math.round(a * 1000)) + ' g' : fmtN(+a.toFixed(3)) + ' kg';
+  if (bu === 'L') return a < 1 ? fmtN(Math.round(a * 1000)) + ' ml' : fmtN(+a.toFixed(3)) + ' L';
+  if (bu === 'pc') return fmtN(a) + (a === 1 ? ' pc' : ' pcs');
+  return fmtN(a) + (a === 1 ? ' pack' : ' packs');
+}
+const normText = (price, x) => money(normPrice(price, x)) + '/' + baseUnit(x);
+const samePack = (a, b) => { const x = packOf(a), y = packOf(b); return x.unit === y.unit && Math.abs(x.size - y.size) < 1e-9; };
+/* Migrate a v1 line/master ({qty, unit}) to packs ({size, sizeUnit, count}). Price stays "per pack" (= per old unit). */
+function migratePack(x, isMaster) {
+  if (!x || typeof x !== 'object') return x;
+  if (!(UNIT_BASE[x.sizeUnit] && num(x.size) > 0)) { const p = parsePack(x.unit); x.size = p.size; x.sizeUnit = p.unit; }
+  if (x.count == null || x.count === '') x.count = x.qty != null && x.qty !== '' ? num(x.qty) : 1;
+  x.count = num(x.count); if (isMaster && !(x.count > 0)) x.count = 1;
+  delete x.qty; delete x.unit;
+  return x;
+}
+const lineTotal = it => num(it.count) * num(it.price);
+function lastLine(mid, beforeMk) {
   const keys = Object.keys(G().months).filter(k => k < beforeMk).sort().reverse();
   for (const k of keys) {
     const it = G().months[k].items.find(i => i.mid === mid && i.bought && num(i.price) > 0);
-    if (it) return num(it.price);
+    if (it) return it;
   }
-  const m = G().master.find(x => x.id === mid);
-  return m ? num(m.price) : 0;
+  return null;
 }
-const monthItem = (m, mk) => ({ mid: m.id, name: m.name, unit: m.unit || '', cat: m.cat || '', want: false, bought: false, qty: 1, price: lastPrice(m.id, mk) });
+/* New month row: the usual pack + count; price = last price paid for that pack (scaled by ₹/kg if the pack changed). */
+function monthItem(m, mk) {
+  const p = packOf(m), l = lastLine(m.id, mk);
+  let price = num(m.price);
+  if (l && samePack(l, m)) price = num(l.price);
+  else if (l && baseUnit(l) === baseUnit(m) && !price) price = Math.round(normPrice(l.price, l) * packBase(m) * 100) / 100;
+  return { mid: m.id, name: m.name, cat: m.cat || '', want: false, bought: false, size: p.size, sizeUnit: p.unit, count: num(m.count) > 0 ? num(m.count) : 1, price };
+}
 /* Create the current month's list from the master list if it doesn't exist (automatic rollover). */
 function ensureMonth(mk) {
   mk = mk || curMonthKey();
@@ -343,6 +407,8 @@ function viewGrocery() {
   if (ui.gMode === 'items') return h + viewGItems();
   return h + viewGMonth();
 }
+const lineMeta = it => qtyText(it) + ' = ' + fmtBase(lineBase(it), baseUnit(it)) + (num(it.price) ? ' · ' + money(it.price) + '/pack' + (packOf(it).unit !== 'pack' ? ' · ' + normText(it.price, it) : '') : '');
+const storesBtn = () => '<button class="btn sm" data-act="stores" data-testid="g-stores-btn">🏪 Stores (' + S.stores.length + ')</button>';
 function viewGMonth() {
   const cur = curMonthKey();
   if (!ui.gMonth || !G().months[ui.gMonth]) ui.gMonth = cur;
@@ -352,8 +418,9 @@ function viewGMonth() {
     '<div class="lab" data-testid="g-month">' + monthName(mk) + (mk === cur ? '' : ' <span class="badge">past</span>') + '</div>' +
     '<button class="icon-btn ghost" data-act="gMonthNav" data-dir="1" aria-label="Next month" ' + (ki >= keys.length - 1 ? 'disabled' : '') + '>›</button></div>';
   if (!G().master.length) {
-    return h + '<div class="empty"><div class="big">🛒</div><div class="bold">Set up your grocery items</div><div class="small">Add the things you usually buy (name, unit, usual price). Every month gets a fresh list from these automatically.</div></div>' +
-      '<div class="fab-row"><button class="btn primary grow" data-act="gAddMaster">＋ Add grocery item</button><button class="btn grow" data-act="photo" data-testid="add-photo">📷 From photo</button></div>';
+    return h + '<div class="empty"><div class="big">🛒</div><div class="bold">Set up your grocery items</div><div class="small">Add the things you usually buy (name, pack size like 200 g or 1 L, usual count and price). Every month gets a fresh list from these automatically.</div></div>' +
+      '<div class="fab-row"><button class="btn primary grow" data-act="gAddMaster">＋ Add grocery item</button><button class="btn grow" data-act="photo" data-testid="add-photo">📷 From photo</button></div>' +
+      '<div class="center">' + storesBtn() + '</div>';
   }
   const tt = monthTotals(mo);
   h += '<div class="card summary"><div><div class="small muted">Spent</div><div class="big" id="gSpent" data-testid="g-spent">' + money(tt.spent) + '</div><div class="tiny muted" id="gSpentN">' + plural(tt.nb, 'item') + ' bought</div></div>' +
@@ -370,34 +437,74 @@ function viewGMonth() {
     let lastCat = null;
     const anyCat = idx.some(j => mo.items[j].cat);
     idx.forEach(i => {
-      const it = mo.items[i];
+      const it = mo.items[i], nm = esc(it.name);
       if ((it.cat || '') !== lastCat) { lastCat = it.cat || ''; if (anyCat) h += '<div class="g-cat">' + esc(lastCat || 'Other') + '</div>'; }
       const active = it.want || it.bought;
-      h += '<div class="g-row ' + (it.want ? 'want ' : '') + (it.bought ? 'bought' : '') + '" data-testid="g-row" data-name="' + esc(it.name) + '">' +
-        '<button class="g-want" data-act="gWant" data-i="' + i + '" aria-label="Want to buy ' + esc(it.name) + '" aria-pressed="' + !!it.want + '">🛒</button>' +
-        '<div class="g-main"><div class="g-name"><span class="g-open" data-act="gItem" data-i="' + i + '">' + esc(it.name) + (it.unit ? ' <span class="muted small">· ' + esc(it.unit) + '</span>' : '') + '</span>' +
-          '<button class="mini" data-act="gCompare" data-i="' + i + '" aria-label="Compare ' + esc(it.name) + ' online" data-testid="g-compare">Compare</button></div>' +
-        (active ? '<div class="g-edit"><input data-chg="gQty" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.qty) + '" aria-label="Quantity of ' + esc(it.name) + '">' +
-          '<span class="muted small">× ₹</span><input class="price" data-chg="gPrice" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.price) + '" aria-label="Price per unit of ' + esc(it.name) + '">' +
-          '<span class="g-line" id="gl' + i + '">' + money(lineTotal(it)) + '</span></div>' +
-          '<div class="g-store-row"><select class="g-store" data-chg="gStore" data-i="' + i + '" aria-label="Store for ' + esc(it.name) + '">' + storeOptions(it.store) + '</select></div>' + cheapestHint(it)
-          : '<div class="small muted">' + (num(it.price) ? money(it.price) + (it.unit ? ' / ' + esc(it.unit) : '') : 'No price yet') + (() => { const ins = storeInsight(it.mid || it.name); return ins && ins.cheapest ? ' · cheapest ' + esc(storeName(ins.cheapest.store)) + ' ' + money(ins.cheapest.price) : ''; })() + '</div>') +
-        '</div><button class="g-check" data-act="gBought" data-i="' + i + '" aria-label="Bought ' + esc(it.name) + '" aria-pressed="' + !!it.bought + '">✓</button></div>';
+      h += '<div class="g-row ' + (it.want ? 'want ' : '') + (it.bought ? 'bought' : '') + '" data-testid="g-row" data-name="' + nm + '">' +
+        '<button class="g-want" data-act="gWant" data-i="' + i + '" aria-label="Want to buy ' + nm + '" aria-pressed="' + !!it.want + '">🛒</button>' +
+        '<div class="g-main"><div class="g-name"><span class="g-open" data-act="gItem" data-i="' + i + '">' + nm + '</span>' +
+          '<button class="mini" data-act="gCompare" data-i="' + i + '" aria-label="Compare ' + nm + ' online" data-testid="g-compare">Compare</button></div>';
+      if (active) {
+        h += '<div class="g-edit"><button class="pack-chip" data-act="gPack" data-i="' + i + '" data-testid="g-pack" aria-label="Pack size of ' + nm + ': ' + esc(packText(it)) + ' (tap to change)">' + esc(packText(it)) + ' <span aria-hidden="true">✎</span></button>' +
+          '<span class="muted" aria-hidden="true">×</span><span class="stepper"><button data-act="gCnt" data-d="-1" data-i="' + i + '" aria-label="One less ' + nm + '">−</button>' +
+          '<input data-chg="gCount" data-i="' + i + '" data-testid="g-count" type="number" inputmode="decimal" step="any" min="0" value="' + esc(fmtN(num(it.count))) + '" aria-label="Number of packs of ' + nm + '">' +
+          '<button data-act="gCnt" data-d="1" data-i="' + i + '" aria-label="One more ' + nm + '">+</button></span>' +
+          '<b class="g-line" id="gl' + i + '">' + money(lineTotal(it)) + '</b></div>' +
+          '<div class="g-store-row"><label class="g-price"><span class="muted small">₹</span><input class="price" data-chg="gPrice" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.price) + '" aria-label="Price per pack of ' + nm + '"></label>' +
+          '<select class="g-store" data-chg="gStore" data-i="' + i + '" aria-label="Store for ' + nm + '">' + storeOptions(it.store) + '</select></div>' +
+          '<div class="tiny muted g-meta" id="gm' + i + '" data-testid="g-meta">' + esc(lineMeta(it)) + '</div>' + cheapestHint(it);
+      } else {
+        const ins = storeInsight(it.mid || it.name);
+        h += '<div class="small muted" data-testid="g-sub">' + esc(qtyText(it)) + ' · ' + (num(it.price) ? money(it.price) + '/pack' : 'no price yet') +
+          (ins && ins.cheapest ? ' · cheapest ' + esc(storeName(ins.cheapest.store)) + ' ' + esc(money(ins.cheapest.norm) + '/' + ins.bu) : '') + '</div>';
+      }
+      h += '</div><button class="g-check" data-act="gBought" data-i="' + i + '" aria-label="Bought ' + nm + '" aria-pressed="' + !!it.bought + '">✓</button></div>';
     });
     h += '</div>';
   }
   const prev = keys[ki - 1];
   if (prev && filter !== 'bought' && !tt.nw && !tt.nb) h += '<div class="center" style="margin-top:8px"><button class="btn sm" data-act="gCopyPlan">⧉ Copy plan from ' + monthName(prev, true) + '</button></div>';
   h += '<div class="fab-row"><button class="btn grow" data-act="gAddMaster">＋ New item</button><button class="btn primary grow" data-act="photo" data-testid="add-photo">📷 Add from photo</button></div>';
-  h += '<div class="tiny muted center">Price is per unit; line total = qty × price. A new month list is created automatically on the 1st.</div>';
+  h += '<div class="row between" style="gap:8px"><span class="tiny muted">Price is per pack · total = price × packs. Tap the size to change it.</span>' + storesBtn() + '</div>';
   return h;
 }
 function updateGTotals(i) {
   const mo = G().months[ui.gMonth], tt = monthTotals(mo);
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-  if (i != null) set('gl' + i, money(lineTotal(mo.items[i])));
+  if (i != null) { set('gl' + i, money(lineTotal(mo.items[i]))); set('gm' + i, lineMeta(mo.items[i])); }
   set('gSpent', money(tt.spent)); set('gPlan', money(tt.planned));
   set('gSpentN', plural(tt.nb, 'item') + ' bought'); set('gPlanN', plural(tt.nw, 'item') + ' · est.');
+}
+const PRICE_MODES = [['pack', 'per pack'], ['total', 'for all the packs (line total)'], ['norm', 'per kg / L / piece']];
+function packPreview(v, name) {
+  const x = { size: num(v.size), sizeUnit: v.unit, count: num(v.count) };
+  if (!(x.size > 0) || !(x.count > 0)) return '<span class="muted">Enter a pack size and count</span>';
+  const pp = v.pmode === 'total' ? num(v.price) / x.count : v.pmode === 'norm' ? num(v.price) * packBase(x) : num(v.price);
+  return '<b>' + esc(name ? name + ' — ' : '') + esc(qtyText(x)) + '</b> = ' + esc(fmtBase(lineBase(x), baseUnit(x))) +
+    (pp ? ' · ' + money(pp * x.count) + ' <span class="muted">(' + money(pp) + '/pack' + (packOf(x).unit !== 'pack' ? ' · ' + normText(pp, x) : '') + ')</span>' : '');
+}
+const pricePerPack = r => r.pmode === 'total' ? num(r.price) / (num(r.count) || 1) : r.pmode === 'norm' ? num(r.price) * packBase({ size: num(r.size), sizeUnit: r.unit }) : num(r.price);
+const packFields = (x, opts) => [
+  { name: 'size', label: 'Pack size', row: 'pk', value: fmtN(packOf(x).size), type: 'number', step: 'any', min: 0, inputmode: 'decimal', required: true },
+  { name: 'unit', label: 'Unit', row: 'pk', type: 'select', value: packOf(x).unit, options: PACK_UNITS.map(u => [u, u === 'pcs' ? 'pcs (pieces)' : u === 'pack' ? 'pack (no size)' : u]) },
+  { name: 'count', row: 'cp', label: opts && opts.master ? 'Usual count (packs)' : 'How many packs', value: fmtN(num(x.count) || 1), type: 'number', step: 'any', min: 0, inputmode: 'decimal' },
+  { name: 'price', row: 'cp', label: opts && opts.master ? 'Usual price (₹)' : 'Price (₹)', value: num(x.price) || '', type: 'number', step: 'any', min: 0, inputmode: 'decimal', placeholder: '0' },
+  { name: 'pmode', label: 'That price is', type: 'select', value: 'pack', options: PRICE_MODES }
+];
+/* Edit pack size / unit / count / price of one month row (the "200 g ✎" chip). */
+async function gPackSheet(i) {
+  const mo = G().months[ui.gMonth], it = mo && mo.items[i]; if (!it) return;
+  const m = it.mid && G().master.find(x => x.id === it.mid);
+  const fields = packFields(it);
+  if (m) fields.push({ name: 'scope', label: 'Save for', type: 'select', value: 'month', options: [['month', 'This month only'], ['usual', 'This month + my usual pack for ' + m.name]] });
+  const r = await formSheet({ title: it.name + ' — pack & price', fields, ok: 'Save', focus: false, preview: v => packPreview(v, '') });
+  if (!r) return;
+  const size = num(r.size); if (!(size > 0)) return;
+  it.size = size; it.sizeUnit = UNIT_BASE[r.unit] ? r.unit : 'pack';
+  if (num(r.count) > 0) it.count = num(r.count);
+  it.price = Math.round(pricePerPack(r) * 100) / 100;
+  if (m && r.scope === 'usual') Object.assign(m, { size: it.size, sizeUnit: it.sizeUnit, count: it.count, price: it.price });
+  save(); render();
 }
 function yearData(y) {
   const months = [], items = {};
@@ -408,11 +515,18 @@ function yearData(y) {
       if (!it.bought) return;
       const lt = lineTotal(it); total += lt;
       const key = it.mid || it.name;
-      const a = items[key] = items[key] || { key, name: it.name, unit: it.unit, times: 0, qty: 0, spend: 0, hist: [] };
-      a.times++; a.qty += num(it.qty); a.spend += lt; a.hist.push({ mk, price: num(it.price), qty: num(it.qty) });
+      const a = items[key] = items[key] || { key, name: it.name, times: 0, spend: 0, hist: [] };
+      a.times++; a.spend += lt; a.hist.push({ mk, price: num(it.price), norm: normPrice(it.price, it), bu: baseUnit(it), base: lineBase(it), pack: packText(it), count: num(it.count) });
     });
     months.push({ mk, total });
   }
+  Object.values(items).forEach(a => {
+    const l = a.hist[a.hist.length - 1]; a.bu = l.bu;
+    a.base = a.hist.filter(h => h.bu === l.bu).reduce((s, h) => s + h.base, 0);
+    const f = a.hist.find(h => h.bu === l.bu);
+    a.change = f && f.norm ? (l.norm - f.norm) / f.norm * 100 : 0;   // compared per kg / L / pc, so pack-size changes don't fake a price change
+    a.now = l;
+  });
   return { months, total: months.reduce((s, m) => s + m.total, 0), items: Object.values(items).sort((a, b) => b.spend - a.spend) };
 }
 function viewGYear() {
@@ -431,13 +545,14 @@ function viewGYear() {
     (active.length ? active.map(m => '<tr><td><button class="btn sm" data-act="gGoMonth" data-mk="' + m.mk + '">' + monthName(m.mk) + '</button></td><td class="r bold">' + money(m.total) + '</td></tr>').join('') : '<tr><td class="muted">No purchases recorded in ' + y + '.</td></tr>') +
     '</table></div>';
   if (yd.items.length) {
-    h += '<h2>What I bought in ' + y + '</h2><div class="card" style="padding:4px 10px"><table class="t"><tr><th>Item</th><th class="r">Qty</th><th class="r">Spent</th><th class="r">Price Δ</th></tr>' +
+    h += '<h2>What I bought in ' + y + '</h2><div class="card" style="padding:4px 10px"><table class="t"><tr><th>Item</th><th class="r">Bought</th><th class="r">Spent</th><th class="r">Price Δ</th></tr>' +
       yd.items.map(a => {
-        const f = a.hist[0].price, l = a.hist[a.hist.length - 1].price, ch = f ? (l - f) / f * 100 : 0;
-        return '<tr data-act="gItemKey" data-key="' + esc(a.key) + '" data-testid="g-year-item" style="cursor:pointer"><td><div class="bold">' + esc(a.name) + '</div><div class="tiny muted">' + plural(a.times, 'month') + ' · now ' + money(l) + (a.unit ? '/' + esc(a.unit) : '') + '</div></td>' +
-          '<td class="r">' + (+a.qty.toFixed(2)) + (a.unit ? ' ' + esc(a.unit) : '') + '</td><td class="r bold">' + money(a.spend) + '</td>' +
+        const ch = a.change, n = a.now;
+        return '<tr data-act="gItemKey" data-key="' + esc(a.key) + '" data-testid="g-year-item" style="cursor:pointer"><td><div class="bold">' + esc(a.name) + '</div><div class="tiny muted">' + plural(a.times, 'month') + ' · now ' + money(n.price) + '/' + esc(n.pack) +
+          (n.bu !== 'pack' ? ' · ' + money(n.norm) + '/' + n.bu : '') + '</div></td>' +
+          '<td class="r">' + esc(fmtBase(a.base, a.bu)) + '</td><td class="r bold">' + money(a.spend) + '</td>' +
           '<td class="r ' + (ch > 0.05 ? 'up' : ch < -0.05 ? 'down' : 'muted') + '">' + (a.hist.length > 1 && Math.abs(ch) > 0.05 ? (ch > 0 ? '▲' : '▼') + Math.abs(ch).toFixed(0) + '%' : '—') + '</td></tr>';
-      }).join('') + '</table></div><div class="tiny muted center">Tap an item for prices by store and history.</div>';
+      }).join('') + '</table></div><div class="tiny muted center">Price Δ compares ₹/kg, ₹/L or ₹/piece, so different pack sizes are fair. Tap an item for prices by store and history.</div>';
   }
   h += viewStoreSummary(y);
   return h;
@@ -445,36 +560,37 @@ function viewGYear() {
 function priceHistory(key) {
   const out = [];
   Object.keys(G().months).sort().forEach(mk => {
-    G().months[mk].items.forEach(it => { if (it.bought && (it.mid || it.name) === key) out.push({ mk, price: num(it.price), qty: num(it.qty), name: it.name, unit: it.unit, store: it.store || '' }); });
+    G().months[mk].items.forEach(it => { if (it.bought && (it.mid || it.name) === key) out.push({ mk, price: num(it.price), norm: normPrice(it.price, it), bu: baseUnit(it), qty: qtyText(it), pack: packText(it), name: it.name, store: it.store || '' }); });
   });
   return out;
 }
 function showHistory(key) {
   const hs = priceHistory(key); if (!hs.length) return;
-  const nm = hs[hs.length - 1].name, unit = hs[hs.length - 1].unit;
+  const nm = hs[hs.length - 1].name, bu = hs[hs.length - 1].bu;
   let rows = '', prev = null;
   hs.forEach(x => {
-    const d = prev ? (x.price - prev) / prev * 100 : null;
-    rows += '<tr data-testid="hist-row"><td>' + monthName(x.mk) + '<div class="tiny muted">' + esc(storeName(x.store)) + '</div></td><td class="r">' + x.qty + '</td><td class="r bold">' + money(x.price) + '</td><td class="r ' + (d > 0.05 ? 'up' : d < -0.05 ? 'down' : 'muted') + '">' + (d == null || Math.abs(d) <= 0.05 ? '—' : (d > 0 ? '▲' : '▼') + Math.abs(d).toFixed(1) + '%') + '</td></tr>';
-    prev = x.price;
+    const d = prev && prev.bu === x.bu ? (x.norm - prev.norm) / prev.norm * 100 : null;
+    rows += '<tr data-testid="hist-row"><td>' + monthName(x.mk) + '<div class="tiny muted">' + esc(storeName(x.store)) + '</div></td><td class="r small">' + esc(x.qty) + '</td><td class="r"><b>' + money(x.price) + '</b>' +
+      (x.bu !== 'pack' ? '<div class="tiny muted">' + money(x.norm) + '/' + x.bu + '</div>' : '') + '</td><td class="r ' + (d > 0.05 ? 'up' : d < -0.05 ? 'down' : 'muted') + '">' + (d == null || Math.abs(d) <= 0.05 ? '—' : (d > 0 ? '▲' : '▼') + Math.abs(d).toFixed(1) + '%') + '</td></tr>';
+    prev = x;
   });
-  const prices = hs.map(x => x.price);
+  const norms = hs.filter(x => x.bu === bu).map(x => x.norm);
   $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Price history"><div class="grab"></div><h3>' + esc(nm) + ' — price history</h3>' +
-    '<div class="small muted">Per ' + esc(unit || 'unit') + ' · low ' + money(Math.min.apply(null, prices)) + ' · high ' + money(Math.max.apply(null, prices)) + '</div>' +
-    '<table class="t" style="margin-top:8px"><tr><th>Month</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Change</th></tr>' + rows + '</table>' +
+    '<div class="small muted">Per ' + esc(bu) + ' · low ' + money(Math.min.apply(null, norms)) + ' · high ' + money(Math.max.apply(null, norms)) + ' · change is per ' + esc(bu) + '</div>' +
+    '<table class="t" style="margin-top:8px"><tr><th>Month</th><th class="r">Bought</th><th class="r">Price/pack</th><th class="r">Change</th></tr>' + rows + '</table>' +
     '<div class="actions"><button class="btn block" type="button" data-close>Close</button></div></div></div>';
   const bg = $('#sheetRoot .sheet-bg');
   bg.addEventListener('click', e => { if (e.target === bg || e.target.closest('[data-close]')) closeSheet(); });
 }
 function viewGItems() {
   const M = G().master;
-  let h = '<div class="note">These are your usual grocery items. Each new month starts with all of them (unticked), prefilled with the last price you paid.</div>';
+  let h = '<div class="note">These are your usual grocery items. Each new month starts with all of them (unticked), with your usual pack and count, prefilled with the last price you paid.</div>';
   if (!M.length) h += '<div class="empty small">No items yet.</div>';
   else {
     h += '<div class="card" style="padding:2px 12px">';
     M.slice().sort((a, b) => (a.cat || '~').localeCompare(b.cat || '~') || a.name.localeCompare(b.name)).forEach(m => {
       h += '<div class="item" data-testid="g-master"><div class="txt" data-act="gItemKey" data-key="' + m.id + '" style="cursor:pointer;padding-left:4px"><div class="bold">' + esc(m.name) + '</div><div class="small muted">' +
-        (m.cat ? esc(m.cat) + ' · ' : '') + (num(m.price) ? money(m.price) : '—') + (m.unit ? ' / ' + esc(m.unit) : '') + '</div></div>' +
+        (m.cat ? esc(m.cat) + ' · ' : '') + esc(qtyText(m)) + ' · ' + (num(m.price) ? money(m.price) + '/pack' : '—') + '</div></div>' +
         '<button class="icon-btn ghost sm" data-act="gEditMaster" data-id="' + m.id + '" aria-label="Edit ' + esc(m.name) + '">✏️</button>' +
         '<button class="icon-btn ghost sm" data-act="gDelMaster" data-id="' + m.id + '" aria-label="Delete ' + esc(m.name) + '">✕</button></div>';
     });
@@ -486,17 +602,15 @@ function viewGItems() {
 }
 function masterFields(m) {
   const cats = Array.from(new Set(G().master.map(x => x.cat).filter(Boolean)));
-  return [
-    { name: 'name', label: 'Item name', value: m ? m.name : '', placeholder: 'e.g. Toor dal', required: true },
-    { name: 'unit', label: 'Unit', value: m ? m.unit : '', placeholder: 'kg, litre, packet, dozen…' },
-    { name: 'price', label: 'Usual price per unit (₹)', value: m ? m.price : '', type: 'number', step: 'any', min: 0, inputmode: 'decimal', placeholder: '0' },
-    { name: 'cat', label: 'Category (optional)', value: m ? m.cat || '' : '', placeholder: cats.length ? cats.slice(0, 3).join(', ') : 'Staples, Vegetables, Dairy…' }
-  ];
+  return [{ name: 'name', label: 'Item name', value: m ? m.name : '', placeholder: 'e.g. Toor dal', required: true }]
+    .concat(packFields(m || { size: 1, sizeUnit: 'kg', count: 1, price: '' }, { master: true }))
+    .concat([{ name: 'cat', label: 'Category (optional)', value: m ? m.cat || '' : '', placeholder: cats.length ? cats.slice(0, 3).join(', ') : 'Staples, Vegetables, Dairy…' }]);
 }
+const masterFromForm = r => ({ name: r.name, size: num(r.size) > 0 ? num(r.size) : 1, sizeUnit: UNIT_BASE[r.unit] ? r.unit : 'pack', count: num(r.count) > 0 ? num(r.count) : 1, price: Math.round(pricePerPack(r) * 100) / 100, cat: r.cat });
 async function gAddMaster() {
-  const r = await formSheet({ title: 'New grocery item', fields: masterFields(null), ok: 'Add' });
+  const r = await formSheet({ title: 'New grocery item', fields: masterFields(null), ok: 'Add', preview: v => packPreview(v, v.name) });
   if (!r || !r.name) return;
-  const m = { id: uid(), name: r.name, unit: r.unit, price: num(r.price), cat: r.cat };
+  const m = Object.assign({ id: uid() }, masterFromForm(r));
   G().master.push(m);
   const cmk = curMonthKey(), cm = G().months[cmk];
   if (cm) cm.items.push(monthItem(m, cmk));
@@ -505,15 +619,19 @@ async function gAddMaster() {
 }
 async function gEditMaster(id) {
   const m = G().master.find(x => x.id === id); if (!m) return;
-  const r = await formSheet({ title: 'Edit item', fields: masterFields(m) });
+  const r = await formSheet({ title: 'Edit item', fields: masterFields(m), preview: v => packPreview(v, v.name) });
   if (!r || !r.name) return;
-  const oldPrice = num(m.price);
-  Object.assign(m, { name: r.name, unit: r.unit, price: num(r.price), cat: r.cat });
+  const old = { size: m.size, sizeUnit: m.sizeUnit, count: num(m.count), price: num(m.price) };
+  Object.assign(m, masterFromForm(r));
   const cm = G().months[curMonthKey()];
   if (cm) cm.items.forEach(it => {
     if (it.mid !== id) return;
-    it.name = m.name; it.unit = m.unit; it.cat = m.cat;
-    if (!it.bought && (num(it.price) === oldPrice || !num(it.price))) it.price = m.price;
+    it.name = m.name; it.cat = m.cat;
+    if (it.bought) return;
+    const packWasUsual = samePack(it, old);
+    if (packWasUsual) { it.size = m.size; it.sizeUnit = m.sizeUnit; }
+    if (num(it.count) === old.count) it.count = m.count;
+    if (packWasUsual && (num(it.price) === old.price || !num(it.price))) it.price = m.price;
   });
   save(); render();
 }
@@ -715,38 +833,80 @@ function compareLinks(name, cls) {
 }
 const storeById = id => S.stores.find(s => s.id === id);
 const storeName = id => (id && storeById(id)) ? storeById(id).name : 'Unknown store';
+const NEW_STORE = '__new__';
 function storeOptions(sel) {
   const known = sel && storeById(sel);
-  return '<option value=""' + (!known ? ' selected' : '') + '>Unknown store</option>' + S.stores.map(s => '<option value="' + esc(s.id) + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + '</option>').join('');
+  return '<option value=""' + (!known ? ' selected' : '') + '>Unknown store</option>' + S.stores.map(s => '<option value="' + esc(s.id) + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + '</option>').join('') +
+    '<option value="' + NEW_STORE + '">＋ New store…</option>';
+}
+/* Add a store by name; returns the existing one on a case-insensitive match (no duplicates). */
+function ensureStore(name) {
+  const v = String(name || '').replace(/\s+/g, ' ').trim(); if (!v) return null;
+  const hit = S.stores.find(x => x.name.toLowerCase() === v.toLowerCase());
+  if (hit) return { store: hit, created: false };
+  const st = { id: uid(), name: v }; S.stores.push(st); save();
+  return { store: st, created: true };
+}
+/* Ask for a new store name in a small layer ON TOP of whatever sheet is open (that sheet stays put). */
+function promptNewStore() {
+  return new Promise(resolve => {
+    let layer = document.getElementById('promptRoot');
+    if (!layer) { layer = document.createElement('div'); layer.id = 'promptRoot'; document.body.appendChild(layer); }
+    layer.innerHTML = '<div class="sheet-bg layer2"><form class="sheet" role="dialog" aria-modal="true" aria-label="New store" data-testid="new-store-sheet"><div class="grab"></div><h3>New store</h3>' +
+      '<label class="lbl" for="newStoreName">Store name</label><input class="field" id="newStoreName" name="name" placeholder="e.g. DMart, Star Bazaar, Ratnadeep" autocomplete="off" required>' +
+      '<div class="tiny muted" style="margin:4px 2px">It’s added to your store list and picked here.</div>' +
+      '<div class="actions"><button type="button" class="btn" data-x="cancel">Cancel</button><button type="submit" class="btn primary" data-x="ok">Add store</button></div></form></div>';
+    const bg = layer.firstChild, form = bg.querySelector('form');
+    const done = v => { layer.innerHTML = ''; resolve(v); };
+    bg.addEventListener('click', e => { e.stopPropagation(); if (e.target === bg || e.target.closest('[data-x=cancel]')) done(null); });
+    form.addEventListener('submit', e => {
+      e.preventDefault(); e.stopPropagation();
+      const r = ensureStore(form.name.value); if (!r) return;
+      toast(r.created ? 'Added store “' + r.store.name + '”' : '“' + r.store.name + '” is already in your list — picked it');
+      done(r.store.id);
+    });
+    setTimeout(() => form.name.focus(), 50);
+  });
+}
+/* Wire a store <select>: picking "＋ New store…" prompts for a name, then selects it. */
+async function pickStoreFrom(sel, prev, onPick) {
+  if (sel.value !== NEW_STORE) { onPick(sel.value); return; }
+  const id = await promptNewStore();
+  const val = id || prev || '';
+  document.querySelectorAll('select.g-store, select[data-store-sel]').forEach(x => { const v = x === sel ? val : x.value; x.innerHTML = storeOptions(v); x.value = v; });
+  onPick(val);
 }
 const boughtDate = mk => mk === curMonthKey() ? todayKey() : (mk + '-28' < todayKey() ? mk + '-28' : todayKey());
-/* All price observations for an item: bought lines (per month) + prices recorded manually. */
+/* All price observations for an item: bought lines (per month) + prices recorded manually. Compared per kg / L / piece. */
 function itemObservations(key) {
   const out = [];
   Object.keys(G().months).sort().forEach(mk => G().months[mk].items.forEach(it => {
-    if (it.bought && num(it.price) > 0 && (it.mid || it.name) === key) out.push({ date: it.boughtOn || mk + '-28', mk, store: it.store || '', price: num(it.price), qty: num(it.qty), src: 'bought' });
+    if (it.bought && num(it.price) > 0 && (it.mid || it.name) === key)
+      out.push({ date: it.boughtOn || mk + '-28', mk, store: it.store || '', price: num(it.price), size: packOf(it).size, sizeUnit: packOf(it).unit, count: num(it.count), base: lineBase(it), norm: normPrice(it.price, it), bu: baseUnit(it), pack: packText(it), src: 'bought' });
   }));
-  (G().prices || []).forEach(p => { if (p.mid === key && num(p.price) > 0) out.push({ date: p.date, mk: p.date.slice(0, 7), store: p.store || '', price: num(p.price), src: 'seen', id: p.id }); });
+  (G().prices || []).forEach(p => { if (p.mid === key && num(p.price) > 0) out.push({ date: p.date, mk: p.date.slice(0, 7), store: p.store || '', price: num(p.price), size: packOf(p).size, sizeUnit: packOf(p).unit, norm: normPrice(p.price, p), bu: baseUnit(p), pack: packText(p), src: 'seen', id: p.id }); });
   return out.sort((a, b) => a.date.localeCompare(b.date) || (a.src === 'bought' ? -1 : 1));
 }
-/* Latest price per store, cheapest store, and saving vs. where it was last bought. */
+/* Latest price per store (per kg/L/pc), cheapest store, and saving vs. where it was last bought. */
 function storeInsight(key) {
-  const obs = itemObservations(key); if (!obs.length) return null;
+  const all = itemObservations(key); if (!all.length) return null;
+  const bu = all[all.length - 1].bu, obs = all.filter(o => o.bu === bu);     // only compare like with like (kg with kg…)
   const latest = {};
   obs.forEach(o => { const s = o.store && storeById(o.store) ? o.store : ''; latest[s] = o; });
   let cheapest = null;
-  Object.keys(latest).filter(Boolean).forEach(s => { const o = latest[s]; if (!cheapest || o.price < cheapest.price) cheapest = { store: s, price: o.price, date: o.date }; });
+  Object.keys(latest).filter(Boolean).forEach(s => { const o = latest[s]; if (!cheapest || o.norm < cheapest.norm) cheapest = { store: s, norm: o.norm, price: o.price, pack: o.pack, date: o.date }; });
   const lastBuy = obs.slice().reverse().find(o => o.src === 'bought') || null;
   const lastStore = lastBuy && lastBuy.store && storeById(lastBuy.store) ? lastBuy.store : '';
-  const saving = cheapest && lastBuy && lastStore !== cheapest.store && lastBuy.price > cheapest.price ? r2(lastBuy.price - cheapest.price) : 0;
-  return { latest, cheapest, lastBuy, lastStore, saving, nStores: Object.keys(latest).filter(Boolean).length };
+  const saving = cheapest && lastBuy && lastStore !== cheapest.store && lastBuy.norm > cheapest.norm + 1e-9 ? lastBuy.norm - cheapest.norm : 0;  // per kg / L / pc
+  return { bu, latest, cheapest, lastBuy, lastStore, saving, savingTotal: saving && lastBuy ? saving * lastBuy.base : 0, nStores: Object.keys(latest).filter(Boolean).length };
 }
+const perBu = (n, bu) => money(n) + '/' + bu;
 function cheapestHint(it) {
   const ins = storeInsight(it.mid || it.name);
-  if (!ins || !ins.cheapest || ins.nStores < 1) return '';
-  const cur = num(it.price), cs = ins.cheapest;
-  if ((it.store || '') === cs.store || !(cur > cs.price + 0.004)) return ins.nStores > 1 && (it.store || '') === cs.store ? '<div class="hint good">⭐ Cheapest store</div>' : '';
-  return '<div class="hint" data-testid="cheap-hint">💡 ' + esc(storeName(cs.store)) + ' ' + money(cs.price) + ' · save ' + money(cur - cs.price) + (it.unit ? '/' + esc(it.unit) : '/unit') + '</div>';
+  if (!ins || !ins.cheapest || ins.bu !== baseUnit(it)) return '';
+  const cur = normPrice(it.price, it), cs = ins.cheapest;
+  if ((it.store || '') === cs.store || !(cur > cs.norm + 0.004)) return ins.nStores > 1 && (it.store || '') === cs.store ? '<div class="hint good">⭐ Cheapest store</div>' : '';
+  return '<div class="hint" data-testid="cheap-hint">💡 ' + esc(storeName(cs.store)) + ' ' + perBu(cs.norm, ins.bu) + ' · save ' + perBu(cur - cs.norm, ins.bu) + '</div>';
 }
 function compareSheet(name) {
   $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Compare prices" data-testid="compare-sheet"><div class="grab"></div><h3>Compare “' + esc(name) + '”</h3>' +
@@ -755,48 +915,60 @@ function compareSheet(name) {
   const bg = $('#sheetRoot .sheet-bg');
   bg.addEventListener('click', e => { if (e.target === bg || e.target.closest('[data-close]')) closeSheet(); });
 }
-/* Item detail: compare links, latest price per store, cheapest + saving, record a price. */
+/* Item detail: compare links, latest price per store (normalised), cheapest + saving, record a price. */
 function itemSheet(key) {
   const m = G().master.find(x => x.id === key);
   const obs = itemObservations(key);
   const lastRow = (() => { for (const mk of Object.keys(G().months).sort().reverse()) { const r = G().months[mk].items.find(it => (it.mid || it.name) === key); if (r) return r; } return null; })();
-  const name = m ? m.name : (lastRow ? lastRow.name : key), unit = m ? m.unit : (lastRow ? lastRow.unit : '');
+  const ref = m || lastRow || {};
+  const name = m ? m.name : (lastRow ? lastRow.name : key);
   const ins = storeInsight(key);
   let rows = '';
   if (ins) {
-    Object.keys(ins.latest).sort((a, b) => (!a - !b) || ins.latest[a].price - ins.latest[b].price).forEach(s => {
+    Object.keys(ins.latest).sort((a, b) => (!a - !b) || ins.latest[a].norm - ins.latest[b].norm).forEach(s => {
       const o = ins.latest[s], best = ins.cheapest && ins.cheapest.store === s;
-      rows += '<tr data-testid="store-row"' + (best ? ' class="best"' : '') + '><td>' + (best ? '⭐ ' : '') + esc(storeName(s)) + '</td><td class="r bold">' + money(o.price) + '</td><td class="r tiny muted">' + fmtD(o.date, { day: 'numeric', month: 'short', year: '2-digit' }) + (o.src === 'seen' ? ' · seen' : '') + '</td></tr>';
+      rows += '<tr data-testid="store-row"' + (best ? ' class="best"' : '') + '><td>' + (best ? '⭐ ' : '') + esc(storeName(s)) + '<div class="tiny muted">' + money(o.price) + ' / ' + esc(o.pack) + '</div></td>' +
+        '<td class="r bold">' + (ins.bu === 'pack' ? money(o.norm) : perBu(o.norm, ins.bu)) + '</td><td class="r tiny muted">' + fmtD(o.date, { day: 'numeric', month: 'short', year: '2-digit' }) + (o.src === 'seen' ? ' · seen' : '') + '</td></tr>';
     });
   }
   let saving = '';
   if (ins && ins.lastBuy) {
-    saving = '<div class="note small" data-testid="saving-note">Last bought at <b>' + esc(storeName(ins.lastStore)) + '</b> for ' + money(ins.lastBuy.price) + (unit ? '/' + esc(unit) : '') + '.' +
-      (ins.saving ? ' Cheapest seen: <b>' + esc(storeName(ins.cheapest.store)) + '</b> ' + money(ins.cheapest.price) + ' → save <b>' + money(ins.saving) + '</b> per ' + esc(unit || 'unit') +
-        (ins.lastBuy.qty > 1 ? ' (' + money(ins.saving * ins.lastBuy.qty) + ' on ' + (+ins.lastBuy.qty.toFixed(2)) + ' ' + esc(unit || 'units') + ')' : '') + '.' : (ins.cheapest && ins.nStores > 1 && ins.cheapest.store === ins.lastStore ? (ins.cheapest.price < ins.lastBuy.price - 0.004 ? ' It’s now ' + money(ins.cheapest.price) + ' there — still' : ' That’s') + ' the cheapest store you’ve seen. 👍' : '')) + '</div>';
+    const lb = ins.lastBuy;
+    saving = '<div class="note small" data-testid="saving-note">Last bought at <b>' + esc(storeName(ins.lastStore)) + '</b>: ' + money(lb.price) + ' for ' + esc(lb.pack) + (ins.bu !== 'pack' ? ' (' + perBu(lb.norm, ins.bu) + ')' : '') + '.' +
+      (ins.saving ? ' Cheapest seen: <b>' + esc(storeName(ins.cheapest.store)) + '</b> ' + perBu(ins.cheapest.norm, ins.bu) + ' → save <b>' + perBu(ins.saving, ins.bu) + '</b>' +
+        ' (' + money(ins.savingTotal) + ' on ' + esc(fmtBase(lb.base, ins.bu)) + ').'
+        : (ins.cheapest && ins.nStores > 1 && ins.cheapest.store === ins.lastStore ? (ins.cheapest.norm < lb.norm - 0.004 ? ' It’s now ' + perBu(ins.cheapest.norm, ins.bu) + ' there — still' : ' That’s') + ' the cheapest store you’ve seen. 👍' : '')) + '</div>';
   }
+  const rp = packOf(ref);
   $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet tall" role="dialog" aria-label="Item details" data-testid="item-sheet"><div class="grab"></div>' +
-    '<h3>' + esc(name) + (unit ? ' <span class="muted small">· ' + esc(unit) + '</span>' : '') + '</h3>' +
+    '<h3>' + esc(name) + (m ? ' <span class="muted small">· usual ' + esc(qtyText(m)) + '</span>' : '') + '</h3>' +
     '<div class="small bold" style="margin-top:8px">Compare online</div>' + compareLinks(name) +
-    '<div class="small bold" style="margin-top:14px">Latest price per store <span class="muted tiny">(per ' + esc(unit || 'unit') + ')</span></div>' +
+    '<div class="small bold" style="margin-top:14px">Latest price per store <span class="muted tiny">(compared per ' + esc(ins ? ins.bu : baseUnit(ref)) + ')</span></div>' +
     (rows ? '<table class="t" style="margin-top:4px">' + rows + '</table>' : '<div class="small muted" style="margin:6px 0">No prices yet. Mark it bought with a store, or record a price below.</div>') + saving +
-    '<form class="rec-form" data-x="rec"><select class="field" name="store" aria-label="Store">' + storeOptions(G().lastStore) + '</select>' +
-    '<input class="field" name="price" type="number" inputmode="decimal" step="any" min="0" placeholder="₹ per ' + esc(unit || 'unit') + '" aria-label="Price seen" required>' +
-    '<button class="btn" type="submit">Record</button></form>' +
-    '<div class="tiny muted">Record a price you saw (in a shop or online) without buying.</div>' +
+    '<form class="rec-form" data-x="rec"><div class="rec-line"><select class="field" name="store" aria-label="Store" data-store-sel>' + storeOptions(G().lastStore) + '</select>' +
+    '<input class="field" name="price" type="number" inputmode="decimal" step="any" min="0" placeholder="₹ price" aria-label="Price seen" required></div>' +
+    '<div class="rec-line"><span class="small muted">for</span><input class="field rec-size" name="size" type="number" inputmode="decimal" step="any" min="0" value="' + esc(fmtN(rp.size)) + '" aria-label="Pack size">' +
+    '<select class="field rec-unit" name="unit" aria-label="Unit">' + PACK_UNITS.map(u => '<option' + (u === rp.unit ? ' selected' : '') + '>' + u + '</option>').join('') + '</select>' +
+    '<button class="btn" type="submit">Record</button></div></form>' +
+    '<div class="tiny muted">Record a price you saw (in a shop or online) without buying. Different pack sizes are compared per kg / L / piece.</div>' +
     '<div class="actions">' + (m ? '<button class="btn" type="button" data-x="edit">✏️ Edit item</button>' : '') + (obs.some(o => o.src === 'bought') ? '<button class="btn" type="button" data-x="hist">History</button>' : '') +
-    '<button class="btn primary" type="button" data-close>Close</button></div></div></div>';
+    '<button class="btn primary" type="button" data-close>Close</button></div>' +
+    '<div class="center"><button class="linkish small" type="button" data-x="stores">🏪 Manage stores</button></div></div></div>';
   const bg = $('#sheetRoot .sheet-bg');
   bg.addEventListener('click', e => {
     if (e.target === bg || e.target.closest('[data-close]')) closeSheet();
     else if (e.target.closest('[data-x=edit]')) { closeSheet(); gEditMaster(key); }
     else if (e.target.closest('[data-x=hist]')) showHistory(key);
+    else if (e.target.closest('[data-x=stores]')) storesSheet();
   });
+  const sel = bg.querySelector('select[name=store]');
+  let prevStore = sel.value;
+  sel.addEventListener('change', () => pickStoreFrom(sel, prevStore, v => { prevStore = v; }));
   bg.querySelector('form').addEventListener('submit', e => {
     e.preventDefault();
-    const f = e.target, price = num(f.price.value), store = f.store.value;
+    const f = e.target, price = num(f.price.value), store = f.store.value === NEW_STORE ? '' : f.store.value;
     if (!(price > 0)) return;
-    G().prices.push({ id: uid(), mid: key, store, price, date: todayKey() });
+    G().prices.push({ id: uid(), mid: key, store, price, size: num(f.size.value) > 0 ? num(f.size.value) : 1, sizeUnit: UNIT_BASE[f.unit.value] ? f.unit.value : 'pack', date: todayKey() });
     if (store) G().lastStore = store;
     save(); itemSheet(key); render(); toast('Recorded ' + money(price) + ' at ' + storeName(store));
   });
@@ -817,7 +989,10 @@ function storesSheet() {
     const st = storeById(b.dataset.id); if (!st) return;
     if (b.dataset.sx === 'ren') {
       const r = await formSheet({ title: 'Rename store', fields: [{ name: 'name', label: 'Store name', value: st.name, required: true }] });
-      if (r && r.name) { st.name = r.name; save(); }
+      if (r && r.name) {
+        if (S.stores.some(x => x !== st && x.name.toLowerCase() === r.name.trim().toLowerCase())) toast('“' + r.name + '” already exists');
+        else { st.name = r.name.trim(); save(); }
+      }
       storesSheet();
     } else {
       const ok = await confirmSheet('Delete “' + st.name + '”?', 'Prices recorded at this store will show as “Unknown store”.', 'Delete');
@@ -827,8 +1002,9 @@ function storesSheet() {
   });
   bg.querySelector('form').addEventListener('submit', e => {
     e.preventDefault(); const v = e.target.name.value.trim(); if (!v) return;
-    if (S.stores.some(x => x.name.toLowerCase() === v.toLowerCase())) { toast('“' + v + '” already exists'); return; }
-    S.stores.push({ id: uid(), name: v }); save(); storesSheet();
+    const r = ensureStore(v); if (!r) return;
+    if (!r.created) { toast('“' + r.store.name + '” already exists'); return; }
+    storesSheet();
     const inp = document.querySelector('[data-testid=stores-sheet] input[name=name]'); if (inp) inp.focus();
   });
 }
@@ -842,14 +1018,14 @@ function storeYearSummary(y) {
       const s = it.store && storeById(it.store) ? it.store : '';
       spend[s] = (spend[s] || 0) + lineTotal(it);
       const key = it.mid || it.name;
-      if (cache[key] === undefined) cache[key] = { name: it.name, unit: it.unit, ins: storeInsight(key) };
+      if (cache[key] === undefined) cache[key] = { name: it.name, ins: storeInsight(key) };
     });
   }
   // Potential saving = for each item, (last price paid − cheapest store's latest price) × last quantity,
   // i.e. what switching would save on your next usual purchase. Not a backward-looking guess.
   const items = Object.values(cache).filter(c => c.ins);
-  const top = items.filter(c => c.ins.saving > 0).map(c => ({ name: c.name, unit: c.unit, cheapest: c.ins.cheapest, lastStore: c.ins.lastStore, lastPrice: c.ins.lastBuy.price,
-    saving: r2(c.ins.saving * Math.max(1, num(c.ins.lastBuy.qty))) })).sort((a, b) => b.saving - a.saving);
+  const top = items.filter(c => c.ins.saving > 0).map(c => ({ name: c.name, bu: c.ins.bu, cheapest: c.ins.cheapest, lastStore: c.ins.lastStore, lastNorm: c.ins.lastBuy.norm,
+    saving: r2(c.ins.savingTotal) })).sort((a, b) => b.saving - a.saving);
   const tally = {};
   items.forEach(c => { if (c.ins.cheapest && c.ins.nStores > 1) tally[c.ins.cheapest.store] = (tally[c.ins.cheapest.store] || 0) + 1; });
   const compared = items.filter(c => c.ins.nStores > 1).length;
@@ -865,12 +1041,13 @@ function viewStoreSummary(y) {
   else h += '<div class="small muted">Enter prices with a store (or “Record a price” on an item) at 2+ stores to see where things are cheapest.</div>';
   if (ss.potential > 0.5) h += '<div class="note" data-testid="potential-saving">Buying ' + (ss.nSave === 1 ? 'this item' : 'these ' + ss.nSave + ' items') + ' at the cheapest store you’ve seen would save about <b>' + money(Math.round(ss.potential)) + '</b> on your next usual shop.</div>';
   if (ss.top.length) h += '<table class="t" style="margin-top:6px"><tr><th>Item</th><th>Buy at</th><th class="r">Save</th></tr>' + ss.top.map(t =>
-    '<tr><td><div class="bold">' + esc(t.name) + '</div><div class="tiny muted">' + esc(storeName(t.lastStore)) + ' ' + money(t.lastPrice) + ' → ' + money(t.cheapest.price) + '</div></td><td>' + esc(storeName(t.cheapest.store)) + '</td><td class="r bold">' + money(t.saving) + '</td></tr>').join('') + '</table>';
+    '<tr><td><div class="bold">' + esc(t.name) + '</div><div class="tiny muted">' + esc(storeName(t.lastStore)) + ' ' + perBu(t.lastNorm, t.bu) + ' → ' + perBu(t.cheapest.norm, t.bu) + '</div></td><td>' + esc(storeName(t.cheapest.store)) + '</td><td class="r bold">' + money(t.saving) + '</td></tr>').join('') + '</table>';
   if (total) {
     const max = Math.max.apply(null, Object.values(ss.spend));
     h += '<div class="small bold" style="margin-top:12px">Spend by store</div>' + Object.keys(ss.spend).sort((a, b) => ss.spend[b] - ss.spend[a]).map(s =>
       '<div class="sbar"><span>' + esc(storeName(s)) + '</span><i style="width:' + (ss.spend[s] / max * 100) + '%"></i><b>' + money(ss.spend[s]) + '</b></div>').join('');
   }
+  h += '<div class="center" style="margin-top:10px">' + storesBtn() + '</div>';
   return h + '</div>';
 }
 
@@ -910,9 +1087,9 @@ function cleanName(s) {
 function extractSize(name) {
   const m = name.match(SIZE_RE);
   if (!m) return { name, size: null };
-  const n = parseFloat(m[1]), u = UNIT_WORDS[m[2].toLowerCase()];
+  const n = parseFloat(m[1]), u = toPackUnit(m[2]) || 'pack';
   const rest = (name.slice(0, m.index) + ' ' + name.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').replace(/[\s\-–,(]+$/, '').replace(/^[\s\-–,)]+/, '').trim();
-  return { name: rest, size: { n, u, text: (n === 1 && !['g', 'ml'].includes(u)) ? u : (n + ' ' + u) } };
+  return { name: rest, size: { n, u } };
 }
 const approx = (a, b) => Math.abs(a - b) <= Math.max(1, 0.02 * Math.abs(b));
 const r2 = n => Math.round(n * 100) / 100;
@@ -997,17 +1174,20 @@ function parseOcrText(text) {
       if (SKIP_RE.test(l) && !/^[-*•·\d.)\s]*[A-Za-z]/.test(l.replace(SKIP_RE, ''))) continue;
       l = l.replace(/^\s*[-–—*•·>○◦□☐✓✔]+\s*/, '').replace(/^\(?\d{1,2}[.)]\s+/, '');
       l = l.replace(new RegExp('(^|\\s)([SsOoIl|])\\s*(?=(' + UNIT_RE_SRC + ')\\b)', 'g'), (m0, a, c) => a + ({ S: '5', s: '5', O: '0', o: '0', I: '1', l: '1', '|': '1' })[c] + ' ');
-      let qty = 1, unit = '';
-      let m = l.match(new RegExp('^(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')?\\b\\.?\\s+(?=[A-Za-z])', 'i'));  // "2 kg onions", "3 eggs"
-      if (m) { qty = parseFloat(m[1]); unit = m[2] ? UNIT_WORDS[m[2].toLowerCase()] : ''; l = l.slice(m[0].length); }
-      else {
-        m = l.match(new RegExp('[\\s\\-–:,(]+[xX×]?\\s*(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')?\\.?\\)?\\s*$', 'i')); // "Milk - 3 L", "Eggs x2"
-        if (m) { qty = parseFloat(m[1]); unit = m[2] ? UNIT_WORDS[m[2].toLowerCase()] : ''; l = l.slice(0, m.index); }
-        else { m = l.match(new RegExp('\\s(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')\\.?\\s', 'i')); if (m) { qty = parseFloat(m[1]); unit = UNIT_WORDS[m[2].toLowerCase()]; l = (l.slice(0, m.index) + ' ' + l.slice(m.index + m[0].length)).trim(); } }
-      }
+      // a number with a weight/volume/piece unit is the PACK SIZE ("Toor dal 1 kg", "Butter 100g");
+      // a bare number or "x 3" / "3 packets" is the COUNT ("Milk x 4", "3 Onions").
+      let count = 1, size = null, unit = '';
+      const take = (n, u) => { const pu = u ? (toPackUnit(u) || 'pack') : null; if (pu && pu !== 'pack') { size = n; unit = pu; } else count = n; };
+      let m = l.match(new RegExp('^(\\d+(?:\\.\\d+)?)\\s*(?:[xX×]\\s*)?(' + UNIT_RE_SRC + ')?\\b\\.?\\s*(?:[xX×]\\s+)?(?=[A-Za-z])', 'i'));  // "2 kg onions", "3 eggs", "2 x butter"
+      if (m && !(m[2] === undefined && /^\d+[A-Za-z]/.test(l))) { take(parseFloat(m[1]), m[2]); l = l.slice(m[0].length); }
+      m = l.match(new RegExp('[\\s\\-–:,(]+[xX×]\\s*(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')?\\.?\\)?\\s*$', 'i'));        // "... x 2"
+      if (m) { take(parseFloat(m[1]), m[2]); l = l.slice(0, m.index); }
+      m = l.match(new RegExp('[\\s\\-–:,(]+(\\d+(?:\\.\\d+)?)\\s*(' + UNIT_RE_SRC + ')?\\.?\\)?\\s*$', 'i'));               // "Milk - 3 L", "Eggs 2"
+      if (m) { take(parseFloat(m[1]), m[2]); l = l.slice(0, m.index); }
+      if (size == null) { const sz = extractSize(l); if (sz.size) { size = sz.size.n; unit = sz.size.u; if (unit === 'pack') { count = size; size = null; unit = ''; } l = sz.name; } }  // size inside the name
       const name = cleanName(l);
       if ((name.match(/[A-Za-z]/g) || []).length < 2 || name.length > 40) continue;
-      items.push({ name, qty: qty > 0 && qty < 1000 ? qty : 1, unit, price: 0, amount: 0 });
+      items.push({ name, size: size > 0 && size < 100000 ? size : null, unit: size > 0 ? unit : '', count: count > 0 && count < 1000 ? count : 1, price: 0, amount: 0 });
     }
   }
   // tidy + de-duplicate by normalized name
@@ -1016,8 +1196,8 @@ function parseOcrText(text) {
     if (!it || !it.name || (it.name.match(/[A-Za-z]/g) || []).length < 2) return;
     const k = normName(it.name);
     if (!k) return;
-    const prev = out.find(o => normName(o.name) === k && (o.unit || '') === (it.unit || ''));
-    if (prev) { const tot = prev.qty * prev.price + it.qty * it.price; prev.qty = r2(prev.qty + it.qty); prev.price = prev.qty ? r2(tot / prev.qty) : prev.price; prev.amount = r2(prev.amount + it.amount); }
+    const prev = out.find(o => normName(o.name) === k && (o.unit || '') === (it.unit || '') && (o.size || 0) === (it.size || 0));
+    if (prev) { const tot = prev.count * prev.price + it.count * it.price; prev.count = r2(prev.count + it.count); prev.price = prev.count ? r2(tot / prev.count) : prev.price; prev.amount = r2(prev.amount + it.amount); }
     else out.push(it);
   });
   return { mode, items: out, lines: lines.length };
@@ -1026,7 +1206,9 @@ function mkItem(rawName, nums, mode) {
   let name = cleanName(rawName.replace(/\s+\d+(\.\d+)?\s*$/, ''));
   const sz = extractSize(name);
   name = cleanName(sz.name) || name;
-  return { name, qty: nums.qty, unit: sz.size ? sz.size.text : '', price: r2(nums.price), amount: r2(nums.amount) };
+  let size = sz.size ? sz.size.n : null, unit = sz.size ? sz.size.u : '';
+  if (unit === 'pack') { size = null; unit = ''; }
+  return { name, size, unit, count: nums.qty, price: r2(nums.price), amount: r2(nums.amount) };
 }
 
 /* ---- fuzzy name matching against the usual-items list ---- */
@@ -1187,8 +1369,19 @@ let review = null;
 function openOcrReview(parsed, text) {
   const mk = ui.gMonth && G().months[ui.gMonth] ? ui.gMonth : curMonthKey();
   review = { mk, mode: parsed.mode, asBought: parsed.mode === 'receipt', addMaster: true, text, store: G().lastStore && storeById(G().lastStore) ? G().lastStore : '',
-    items: parsed.items.map(it => ({ on: true, name: it.name, qty: it.qty || 1, unit: it.unit || '', price: it.price || 0 })) };
+    items: parsed.items.map(it => reviewItem(it, parsed.mode)) };
   renderReview();
+}
+/* Fill missing sizes from the matched usual item; on lists, "2 kg" of a usual 1 kg pack becomes 1 kg × 2. */
+function reviewItem(it, mode) {
+  const r = { on: true, name: it.name, size: it.size || 0, unit: it.unit || '', count: it.count || 1, price: it.price || 0 };
+  const m = matchMaster(it.name);
+  if (!r.size || !UNIT_BASE[r.unit]) { const p = m ? packOf(m) : { size: 1, unit: 'pack' }; r.size = p.size; r.unit = p.unit; }
+  else if (m && mode === 'list' && !r.price && r.count === 1 && baseUnit({ sizeUnit: r.unit }) === baseUnit(m) && !samePack({ size: r.size, sizeUnit: r.unit }, m)) {
+    const k = packBase({ size: r.size, sizeUnit: r.unit }) / packBase(m);
+    if (k >= 1 && k <= 6 && Math.abs(k - Math.round(k)) < 1e-6) { r.count = Math.round(k); r.size = packOf(m).size; r.unit = packOf(m).unit; }
+  }
+  return r;
 }
 function reviewMatchLabel(it) {
   if (!it.name.trim()) return '';
@@ -1197,7 +1390,7 @@ function reviewMatchLabel(it) {
 }
 function reviewTotals() {
   const on = review.items.filter(i => i.on && i.name.trim());
-  return { n: on.length, total: on.reduce((s, i) => s + num(i.qty) * num(i.price), 0) };
+  return { n: on.length, total: on.reduce((s, i) => s + num(i.count) * num(i.price), 0) };
 }
 function renderReview() {
   const R = review, tt = reviewTotals();
@@ -1205,9 +1398,10 @@ function renderReview() {
     '<div class="rv-row ' + (it.on ? '' : 'off') + '" data-testid="rv-row">' +
       '<button type="button" class="check ' + (it.on ? 'on' : '') + '" data-rv="toggle" data-i="' + i + '" aria-label="Include ' + esc(it.name) + '" aria-pressed="' + it.on + '"><i>✓</i></button>' +
       '<div class="grow"><input class="rv-name" data-rv-in="name" data-i="' + i + '" value="' + esc(it.name) + '" aria-label="Item name" placeholder="Item name">' +
-        '<div class="rv-sub"><label>Qty <input class="rv-num" data-rv-in="qty" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.qty) + '" aria-label="Quantity"></label>' +
-        '<label>₹ <input class="rv-num price" data-rv-in="price" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.price || '') + '" placeholder="price" aria-label="Unit price"></label>' +
-        (it.unit ? '<span class="tiny muted">' + esc(it.unit) + '</span>' : '') + '</div>' +
+        '<div class="rv-sub"><span class="rv-pack"><input class="rv-num size" data-rv-in="size" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(fmtN(it.size)) + '" aria-label="Pack size">' +
+          '<select class="rv-unit" data-rv-in="unit" data-i="' + i + '" aria-label="Unit">' + PACK_UNITS.map(u => '<option' + (u === it.unit ? ' selected' : '') + '>' + u + '</option>').join('') + '</select></span>' +
+          '<label>× <input class="rv-num cnt" data-rv-in="count" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(fmtN(it.count)) + '" aria-label="Number of packs"></label>' +
+          '<label>₹ <input class="rv-num price" data-rv-in="price" data-i="' + i + '" type="number" inputmode="decimal" step="any" min="0" value="' + esc(it.price || '') + '" placeholder="/pack" aria-label="Price per pack"></label></div>' +
         '<div class="tiny" id="rvm' + i + '">' + reviewMatchLabel(it) + '</div></div>' +
       '<button type="button" class="icon-btn ghost sm" data-rv="del" data-i="' + i + '" aria-label="Delete line">✕</button></div>').join('');
   $('#sheetRoot').innerHTML = '<div class="sheet-bg"><div class="sheet tall" role="dialog" aria-label="Review items" data-testid="ocr-review"><div class="grab"></div>' +
@@ -1217,7 +1411,7 @@ function renderReview() {
     '<button type="button" class="btn sm" data-rv="addline" style="margin:6px 0">＋ Add a line</button>' +
     '<div class="card" style="margin:10px 0 0;padding:12px"><div class="small bold" style="margin-bottom:6px">Add to ' + monthName(R.mk) + ' as</div>' +
       '<div class="seg" style="margin:0"><button type="button" data-rv="want" class="' + (R.asBought ? '' : 'on') + '">🛒 To buy</button><button type="button" data-rv="bought" class="' + (R.asBought ? 'on' : '') + '">✓ Bought (with prices)</button></div>' +
-      '<label class="rv-store small bold">Store <select class="field" data-rv-in="store" aria-label="Store">' + storeOptions(R.store) + '</select></label>' +
+      '<label class="rv-store small bold">Store <select class="field" data-rv-in="store" data-store-sel aria-label="Store">' + storeOptions(R.store) + '</select></label>' +
       '<label class="rv-opt"><input type="checkbox" data-rv-in="addMaster" ' + (R.addMaster ? 'checked' : '') + '> Also add new ones to my usual items</label>' +
       '<div class="tiny muted">Items that match your usual list (↔) are merged, never duplicated.</div></div>' +
     '<details style="margin-top:10px"><summary class="small muted">Show recognised text</summary><pre class="ocr-raw" data-testid="ocr-raw">' + esc(R.text.trim()) + '</pre></details>' +
@@ -1236,9 +1430,9 @@ function updateApplyBtn() {
 function onReviewInput(e) {
   const el = e.target, k = el.dataset.rvIn; if (!k) return;
   if (k === 'addMaster') { review.addMaster = el.checked; return; }
-  if (k === 'store') { review.store = el.value; return; }
+  if (k === 'store') { if (e.type === 'input') pickStoreFrom(el, review.store, v => { review.store = v; }); return; }
   const it = review.items[+el.dataset.i];
-  it[k] = k === 'name' ? el.value : num(el.value);
+  it[k] = (k === 'name' || k === 'unit') ? el.value : num(el.value);
   updateApplyBtn();
 }
 function onReviewClick(e) {
@@ -1246,7 +1440,7 @@ function onReviewClick(e) {
   const a = b.dataset.rv, i = +b.dataset.i;
   if (a === 'toggle') { review.items[i].on = !review.items[i].on; renderReview(); }
   else if (a === 'del') { review.items.splice(i, 1); renderReview(); }
-  else if (a === 'addline') { review.items.push({ on: true, name: '', qty: 1, unit: '', price: 0 }); renderReview(); const ins = document.querySelectorAll('.rv-name'); if (ins.length) ins[ins.length - 1].focus(); }
+  else if (a === 'addline') { review.items.push({ on: true, name: '', size: 1, unit: 'pack', count: 1, price: 0 }); renderReview(); const ins = document.querySelectorAll('.rv-name'); if (ins.length) ins[ins.length - 1].focus(); }
   else if (a === 'want' || a === 'bought') { review.asBought = a === 'bought'; renderReview(); }
   else if (a === 'cancel') { review = null; closeSheet(); }
   else if (a === 'apply') applyReview();
@@ -1257,35 +1451,37 @@ function applyReview() {
   const mo = G().months[R.mk];
   let added = 0, merged = 0, newMaster = 0;
   R.items.filter(i => i.on && i.name.trim()).forEach(it => {
-    const name = it.name.trim(), qty = num(it.qty) > 0 ? num(it.qty) : 1, price = num(it.price);
+    const name = it.name.trim(), count = num(it.count) > 0 ? num(it.count) : 1, price = num(it.price);
+    const pk = { size: num(it.size) > 0 ? num(it.size) : 1, sizeUnit: UNIT_BASE[it.unit] ? it.unit : 'pack' };
     let m = matchMaster(name);
     if (!m && R.addMaster) {
-      m = { id: uid(), name, unit: it.unit || '', price: price, cat: '' };
+      m = { id: uid(), name, size: pk.size, sizeUnit: pk.sizeUnit, count, price, cat: '' };
       G().master.push(m); newMaster++;
       Object.keys(G().months).forEach(k => { if (k >= curMonthKey() && k !== R.mk) G().months[k].items.push(monthItem(m, k)); });
-    } else if (m) {
-      if (!num(m.price) && price) m.price = price;
-      if (!m.unit && it.unit) m.unit = it.unit;
-    }
+    } else if (m && !num(m.price) && price && samePack(m, pk)) m.price = price;
     let row = m ? mo.items.find(x => x.mid === m.id) : mo.items.find(x => !x.mid && nameSimilarity(x.name, name) >= 0.9);
     if (!row) {
-      row = m ? monthItem(m, R.mk) : { mid: null, name, unit: it.unit || '', cat: '', want: false, bought: false, qty: 1, price: price };
-      row.qty = 0; mo.items.push(row); added++;
+      row = m ? monthItem(m, R.mk) : { mid: null, name, cat: '', want: false, bought: false, size: pk.size, sizeUnit: pk.sizeUnit, count: 1, price };
+      row.count = 0; mo.items.push(row); added++;
     } else merged++;
     if (R.asBought) {
-      const wasBought = row.bought;
-      const oldTot = wasBought ? num(row.qty) * num(row.price) : 0, oldQty = wasBought ? num(row.qty) : 0;
-      const p = price || num(row.price);
-      row.qty = r2(oldQty + qty);
-      row.price = row.qty ? r2((oldTot + qty * p) / row.qty) : p;
+      const p = price || (samePack(row, pk) ? num(row.price) : r2(normPrice(row.price, row) * packBase(pk)));
+      if (row.bought && num(row.count) > 0 && baseUnit(row) === baseUnit(pk)) {
+        // bought again this month: keep the new pack size, add up weight/volume and money
+        const base = lineBase(row) + packBase(pk) * count, spend = lineTotal(row) + p * count;
+        row.size = pk.size; row.sizeUnit = pk.sizeUnit; row.count = r2(base / packBase(pk)); row.price = row.count ? r2(spend / row.count) : p;
+      } else { row.size = pk.size; row.sizeUnit = pk.sizeUnit; row.count = count; row.price = p; }
       row.bought = true; row.want = true; row.boughtOn = boughtDate(R.mk);
       if (R.store) row.store = R.store;
     } else {
-      const wasActive = row.want || row.bought;
+      const wasActive = (row.want || row.bought) && num(row.count) > 0;
       row.want = true;
-      if (!wasActive || !num(row.qty)) row.qty = qty;
-      if (price && !row.bought) { row.price = price; if (R.store) row.store = R.store; }
-      if (price && R.store) G().prices.push({ id: uid(), mid: m ? m.id : name, store: R.store, price, date: todayKey() });
+      if (!wasActive) {
+        if (!samePack(row, pk) && !price) row.price = num(row.price) ? r2(normPrice(row.price, row) * packBase(pk)) : 0;  // estimate for the new size
+        row.size = pk.size; row.sizeUnit = pk.sizeUnit; row.count = count;
+      }
+      if (price && !row.bought && samePack(row, pk)) { row.price = price; if (R.store) row.store = R.store; }
+      if (price && R.store) G().prices.push({ id: uid(), mid: m ? m.id : name, store: R.store, price, size: pk.size, sizeUnit: pk.sizeUnit, date: todayKey() });
     }
   });
   if (R.store) G().lastStore = R.store;
@@ -1416,11 +1612,13 @@ const A = {
   gItem: d => { const it = G().months[ui.gMonth].items[+d.i]; if (it) itemSheet(it.mid || it.name); },
   gItemKey: d => itemSheet(d.key),
   gCompare: d => { const it = G().months[ui.gMonth].items[+d.i]; if (it) compareSheet(it.name); },
+  gPack: d => gPackSheet(+d.i),
+  gCnt: d => { const it = G().months[ui.gMonth].items[+d.i]; if (!it) return; const n = r2(num(it.count) + (+d.d)); if (n <= 0) return; it.count = n; save(); render(); },
   stores: () => storesSheet(),
   gCopyPlan: () => {
     const keys = Object.keys(G().months).sort(), prev = G().months[keys[keys.indexOf(ui.gMonth) - 1]]; if (!prev) return;
     const mo = G().months[ui.gMonth]; let n = 0;
-    prev.items.forEach(p => { if (!(p.want || p.bought)) return; const it = mo.items.find(x => (x.mid && x.mid === p.mid) || x.name === p.name); if (it) { it.want = true; it.qty = p.qty; n++; } });
+    prev.items.forEach(p => { if (!(p.want || p.bought)) return; const it = mo.items.find(x => (x.mid && x.mid === p.mid) || x.name === p.name); if (it) { it.want = true; it.count = p.count; if (!it.bought && !samePack(it, p)) { it.size = p.size; it.sizeUnit = p.sizeUnit; it.price = num(p.price) || it.price; } n++; } });
     ui.gFilter = 'list'; save(); render(); toast('Copied ' + plural(n, 'item'));
   },
   gAddMaster: () => gAddMaster(), gEditMaster: d => gEditMaster(d.id), gDelMaster: d => gDelMaster(d.id),
@@ -1459,9 +1657,12 @@ const F = {
   goalDate: f => { const g = S.goals.find(x => x.id === ui.goalId); if (g) goalMark(g, f.elements.day.value); }
 };
 const C = {
-  gQty: (d, el) => { const it = G().months[ui.gMonth].items[+d.i]; it.qty = num(el.value); save(); updateGTotals(+d.i); },
+  gCount: (d, el) => { const it = G().months[ui.gMonth].items[+d.i]; it.count = num(el.value); save(); updateGTotals(+d.i); },
   gPrice: (d, el) => { const it = G().months[ui.gMonth].items[+d.i]; it.price = num(el.value); save(); updateGTotals(+d.i); },
-  gStore: (d, el) => { const it = G().months[ui.gMonth].items[+d.i]; it.store = el.value; if (el.value) G().lastStore = el.value; save(); }
+  gStore: (d, el) => {
+    const it = G().months[ui.gMonth].items[+d.i];
+    pickStoreFrom(el, it.store, v => { it.store = v; if (v) G().lastStore = v; save(); });
+  }
 };
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
